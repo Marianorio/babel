@@ -9,6 +9,7 @@ import { TranslationService, type TranslationProvider } from "@/services/transla
 import { logActivity } from "@/services/activity-service"
 import { validateMime } from "@/lib/mime-validator"
 import { rateLimit } from "@/lib/rate-limit"
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs"
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp"]
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"]
@@ -67,8 +68,7 @@ export async function uploadDocument(formData: FormData) {
     if (IMAGE_EXTENSIONS.includes(ext)) {
       originalText = await extractTextFromImage(buffer)
     } else if (ext === ".pdf") {
-      const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs")
-      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) })
+      const loadingTask = getDocument({ data: new Uint8Array(buffer) })
       const doc = await loadingTask.promise
       const pages: string[] = []
       for (let i = 1; i <= doc.numPages; i++) {
@@ -88,7 +88,9 @@ export async function uploadDocument(formData: FormData) {
     } else {
       originalText = buffer.toString("utf-8").replace(/\0/g, "")
     }
-  } catch {
+  } catch (err) {
+    console.error("Error extrayendo texto:", err instanceof Error ? err.message : err)
+    if (err instanceof Error) console.error("Stack:", err.stack)
     return { error: `No se pudo extraer el texto del archivo ${ext}. Asegúrate de que no esté protegido o dañado.` }
   }
 
