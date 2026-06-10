@@ -11,7 +11,15 @@ export default async function SettingsPage() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { name: true, email: true },
+    select: {
+      name: true,
+      email: true,
+      language: true,
+      theme: true,
+      timezone: true,
+      country: true,
+      translationProvider: true,
+    },
   })
 
   if (!user) redirect("/login")
@@ -25,7 +33,17 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <SettingsForm user={user} />
+      <SettingsForm
+        user={{
+          name: user.name,
+          email: user.email,
+          language: user.language,
+          theme: user.theme,
+          timezone: user.timezone,
+          country: user.country,
+          translationProvider: user.translationProvider,
+        }}
+      />
       <Separator />
       <PasswordForm />
     </div>

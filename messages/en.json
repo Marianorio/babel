@@ -1,0 +1,112 @@
+{
+  "common": {
+    "appName": "Babel",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "noResults": "No results",
+    "error": "Error",
+    "success": "Success"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "documents": "My Documents",
+    "newTranslation": "New Translation",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome, {name}. Activity summary.",
+    "totalDocuments": "Total Documents",
+    "completedTranslations": "Completed Translations",
+    "availableLanguages": "Available Languages",
+    "recentActivity": "Recent Activity",
+    "quickAction": "Quick Action",
+    "newTranslation": "New Translation",
+    "viewDocuments": "View My Documents",
+    "noDocuments": "No documents yet",
+    "startTranslation": "Start your first translation"
+  },
+  "documents": {
+    "title": "My Documents",
+    "subtitle": "History of all your documents and translations.",
+    "newTranslation": "New Translation",
+    "empty": "No documents",
+    "emptyDescription": "You haven't uploaded any documents yet.",
+    "uploadFirst": "Upload your first document",
+    "noResults": "No results",
+    "noResultsDescription": "Try different search filters.",
+    "table": {
+      "name": "Name",
+      "languages": "Languages",
+      "size": "Size",
+      "status": "Status",
+      "date": "Date",
+      "actions": "Actions",
+      "completed": "Completed",
+      "processing": "Processing",
+      "pending": "Pending",
+      "error": "Error"
+    },
+    "filters": {
+      "search": "Search documents...",
+      "allLanguages": "All languages",
+      "allStatuses": "All statuses",
+      "sortRecent": "Most recent",
+      "sortOldest": "Oldest"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Manage your profile and account settings.",
+    "personalInfo": "Personal Information",
+    "personalInfoDesc": "Update your name and other details.",
+    "name": "Name",
+    "email": "Email",
+    "emailUnchangeable": "Email cannot be changed.",
+    "password": "Change Password",
+    "passwordDesc": "Update your login password.",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "preferences": "Preferences",
+    "preferencesDesc": "Set your language, theme and region.",
+    "language": "Interface Language",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "timezone": "Timezone",
+    "country": "Country",
+    "translationProvider": "Translation Provider",
+    "translationProviderDesc": "Select the AI provider for translations.",
+    "saveChanges": "Save Changes",
+    "profileUpdated": "Profile updated",
+    "passwordUpdated": "Password updated"
+  },
+  "translation": {
+    "title": "New Translation",
+    "subtitle": "Upload a document and select languages.",
+    "dropzone": "Drag and drop your document here, or click to select",
+    "dropzoneFormats": "PDF, DOCX or TXT (max 10 MB)",
+    "sourceLanguage": "Source Language",
+    "targetLanguage": "Target Language",
+    "uploading": "Uploading and translating...",
+    "uploadSuccess": "Document uploaded and translated successfully",
+    "uploadError": "Error processing document",
+    "viewer": {
+      "original": "Original Text",
+      "translated": "Translation",
+      "downloadTxt": "Download TXT",
+      "downloadPdf": "Download PDF",
+      "noTranslation": "Translation not available"
+    }
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  }
+}

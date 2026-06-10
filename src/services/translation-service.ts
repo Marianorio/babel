@@ -1,4 +1,4 @@
-type TranslationProvider = "deepseek" | "openrouter" | "gemini" | "openai" | "mock"
+export type TranslationProvider = "deepseek" | "openrouter" | "gemini" | "openai" | "libretranslate" | "argos" | "mock"
 
 interface TranslationResult {
   translatedText: string
@@ -44,8 +44,8 @@ const MOCK_TRANSLATIONS: Record<string, Record<string, string>> = {
 export class TranslationService {
   private provider: TranslationProvider
 
-  constructor(provider: TranslationProvider = "mock") {
-    this.provider = provider
+  constructor(provider?: TranslationProvider) {
+    this.provider = provider || (process.env.TRANSLATION_PROVIDER as TranslationProvider) || "mock"
   }
 
   setProvider(provider: TranslationProvider) {
@@ -62,6 +62,10 @@ export class TranslationService {
         return this.translateWithGemini(request)
       case "openai":
         return this.translateWithOpenAI(request)
+      case "libretranslate":
+        return this.translateWithLibreTranslate(request)
+      case "argos":
+        return this.translateWithArgos(request)
       case "mock":
       default:
         return this.translateWithMock(request)
@@ -227,6 +231,75 @@ export class TranslationService {
     return {
       translatedText: data.choices[0].message.content,
       provider: "openai",
+    }
+  }
+
+  private async translateWithLibreTranslate(
+    request: TranslationRequest
+  ): Promise<TranslationResult> {
+    const baseUrl = process.env.LIBRETRANSLATE_URL || "https://libretranslate.com"
+    const apiKey = process.env.LIBRETRANSLATE_API_KEY
+
+    try {
+      const response = await fetch(`${baseUrl}/translate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
+        },
+        body: JSON.stringify({
+          q: request.text,
+          source: request.sourceLanguage,
+          target: request.targetLanguage,
+          format: "text",
+        }),
+      })
+
+      if (!response.ok) {
+        console.warn(`LibreTranslate error (${response.status}), falling back to mock`)
+        return this.translateWithMock(request)
+      }
+
+      const data = await response.json()
+      return {
+        translatedText: data.translatedText,
+        provider: "libretranslate",
+      }
+    } catch {
+      console.warn("LibreTranslate unavailable, falling back to mock")
+      return this.translateWithMock(request)
+    }
+  }
+
+  private async translateWithArgos(
+    request: TranslationRequest
+  ): Promise<TranslationResult> {
+    const baseUrl = process.env.ARGOS_URL || "http://localhost:5000"
+
+    try {
+      const response = await fetch(`${baseUrl}/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          q: request.text,
+          source: request.sourceLanguage,
+          target: request.targetLanguage,
+        }),
+      })
+
+      if (!response.ok) {
+        console.warn(`Argos error (${response.status}), falling back to mock`)
+        return this.translateWithMock(request)
+      }
+
+      const data = await response.json()
+      return {
+        translatedText: data.translatedText,
+        provider: "argos",
+      }
+    } catch {
+      console.warn("Argos unavailable, falling back to mock")
+      return this.translateWithMock(request)
     }
   }
 }

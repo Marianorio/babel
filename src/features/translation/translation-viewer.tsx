@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  FileDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,26 +21,26 @@ const statusConfig = {
   completed: {
     icon: CheckCircle2,
     label: "Traducción completada",
-    color: "text-green-600",
-    bg: "bg-green-50",
+    color: "text-green-600 dark:text-green-400",
+    bg: "bg-green-50 dark:bg-green-900/20",
   },
   processing: {
     icon: Clock,
     label: "Procesando traducción...",
-    color: "text-yellow-600",
-    bg: "bg-yellow-50",
+    color: "text-yellow-600 dark:text-yellow-400",
+    bg: "bg-yellow-50 dark:bg-yellow-900/20",
   },
   pending: {
     icon: Clock,
     label: "Pendiente",
-    color: "text-gray-600",
-    bg: "bg-gray-50",
+    color: "text-gray-600 dark:text-gray-400",
+    bg: "bg-gray-50 dark:bg-gray-800",
   },
   error: {
     icon: AlertCircle,
     label: "Error en la traducción",
-    color: "text-red-600",
-    bg: "bg-red-50",
+    color: "text-red-600 dark:text-red-400",
+    bg: "bg-red-50 dark:bg-red-900/20",
   },
 }
 
@@ -82,20 +83,32 @@ export function TranslationViewer({ document }: { document: Document }) {
             <p className="text-sm text-muted-foreground">
               {document.sourceLanguage.toUpperCase()} →{" "}
               {document.targetLanguage.toUpperCase()} ·{" "}
-              {formatFileSize(document.fileSize)} ·{" "}
+              {formatFileSize(document.fileSize)}
+              {document.wordCount > 0 && ` · ${document.wordCount} palabras`}
+              {document.charCount > 0 && ` · ${document.charCount} caracteres`}
+              {" · "}
               {formatDate(document.createdAt)}
             </p>
           </div>
         </div>
 
         {document.translatedText && (
-          <a
-            href={`/api/documents/${document.id}/download`}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Download className="h-4 w-4" />
-            Descargar
-          </a>
+          <div className="flex gap-2">
+            <a
+              href={`/api/documents/${document.id}/download`}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Download className="h-4 w-4" />
+              TXT
+            </a>
+            <a
+              href={`/api/documents/${document.id}/download-pdf`}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <FileDown className="h-4 w-4" />
+              PDF
+            </a>
+          </div>
         )}
       </div>
 

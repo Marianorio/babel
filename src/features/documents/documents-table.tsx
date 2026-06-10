@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Eye, Download, Trash2 } from "lucide-react"
+import { Eye, Download, Trash2, FileDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -87,13 +87,22 @@ export function DocumentsTable({ documents }: { documents: Document[] }) {
                     </Button>
                   </Link>
                   {doc.translatedText && (
-                    <a
-                      href={`/api/documents/${doc.id}/download`}
-                      download
-                      className="inline-flex items-center justify-center rounded-md p-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
+                    <>
+                      <a
+                        href={`/api/documents/${doc.id}/download`}
+                        download
+                        className="inline-flex items-center justify-center rounded-md p-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
+                      <a
+                        href={`/api/documents/${doc.id}/download-pdf`}
+                        download
+                        className="inline-flex items-center justify-center rounded-md p-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <FileDown className="h-4 w-4" />
+                      </a>
+                    </>
                   )}
                   <Button
                     variant="ghost"

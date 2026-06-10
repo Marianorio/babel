@@ -12,11 +12,18 @@ model User {
   name      String
   email     String     @unique
   password  String
+  image     String?
+  language            String     @default("es")
+  theme               String     @default("light")
+  timezone            String?
+  country             String?
+  translationProvider String     @default("mock")
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   documents Document[]
   accounts  Account[]
   sessions  Session[]
+  activities ActivityLog[]
 }
 
 model Document {
@@ -30,10 +37,29 @@ model Document {
   translatedText String?  @db.Text
   status         String   @default("pending")
   fileSize       Int      @default(0)
+  wordCount      Int      @default(0)
+  charCount      Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities ActivityLog[]
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  detail    String?
+  metadata  String?  @db.Text
+  createdAt DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document Document? @relation(fields: [documentId], references: [id])
+  documentId String?
+
+  @@index([userId, createdAt])
+  @@index([type])
 }
 
 model Account {

@@ -9,9 +9,9 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <div className="flex flex-1 flex-col lg:pl-64">
+      <div className="flex flex-1 flex-col lg:pl-64 transition-all duration-300">
         <Topbar />
-        <main className="flex-1 p-6 animate-fade-in">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 animate-fade-in">{children}</main>
       </div>
     </div>
   )

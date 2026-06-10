@@ -1,0 +1,112 @@
+{
+  "common": {
+    "appName": "Babel",
+    "loading": "Cargando...",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "search": "Buscar",
+    "noResults": "Sin resultados",
+    "error": "Error",
+    "success": "Éxito"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "documents": "Mis documentos",
+    "newTranslation": "Nueva traducción",
+    "settings": "Configuración"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Bienvenido, {name}. Resumen de tu actividad.",
+    "totalDocuments": "Documentos totales",
+    "completedTranslations": "Traducciones completadas",
+    "availableLanguages": "Idiomas disponibles",
+    "recentActivity": "Actividad reciente",
+    "quickAction": "Acción rápida",
+    "newTranslation": "Nueva traducción",
+    "viewDocuments": "Ver mis documentos",
+    "noDocuments": "No hay documentos aún",
+    "startTranslation": "Comienza tu primera traducción"
+  },
+  "documents": {
+    "title": "Mis documentos",
+    "subtitle": "Historial de todos tus documentos y traducciones.",
+    "newTranslation": "Nueva traducción",
+    "empty": "No hay documentos",
+    "emptyDescription": "Aún no has subido ningún documento para traducir.",
+    "uploadFirst": "Subir tu primer documento",
+    "noResults": "Sin resultados",
+    "noResultsDescription": "Prueba con otros filtros de búsqueda.",
+    "table": {
+      "name": "Nombre",
+      "languages": "Idiomas",
+      "size": "Tamaño",
+      "status": "Estado",
+      "date": "Fecha",
+      "actions": "Acciones",
+      "completed": "Completado",
+      "processing": "Procesando",
+      "pending": "Pendiente",
+      "error": "Error"
+    },
+    "filters": {
+      "search": "Buscar documentos...",
+      "allLanguages": "Todos los idiomas",
+      "allStatuses": "Todos los estados",
+      "sortRecent": "Más recientes",
+      "sortOldest": "Más antiguos"
+    }
+  },
+  "settings": {
+    "title": "Configuración",
+    "subtitle": "Administra tu perfil y configuración de cuenta.",
+    "personalInfo": "Información personal",
+    "personalInfoDesc": "Actualiza tu nombre y otros datos personales.",
+    "name": "Nombre",
+    "email": "Email",
+    "emailUnchangeable": "El email no se puede cambiar.",
+    "password": "Cambiar contraseña",
+    "passwordDesc": "Actualiza tu contraseña de acceso.",
+    "currentPassword": "Contraseña actual",
+    "newPassword": "Nueva contraseña",
+    "preferences": "Preferencias",
+    "preferencesDesc": "Configura tu idioma, tema y región.",
+    "language": "Idioma de la interfaz",
+    "theme": "Tema",
+    "themeLight": "Claro",
+    "themeDark": "Oscuro",
+    "themeSystem": "Sistema",
+    "timezone": "Zona horaria",
+    "country": "País",
+    "translationProvider": "Proveedor de traducción",
+    "translationProviderDesc": "Selecciona el proveedor de IA para las traducciones.",
+    "saveChanges": "Guardar cambios",
+    "profileUpdated": "Perfil actualizado",
+    "passwordUpdated": "Contraseña actualizada"
+  },
+  "translation": {
+    "title": "Nueva traducción",
+    "subtitle": "Sube un documento y selecciona los idiomas.",
+    "dropzone": "Arrastra y suelta tu documento aquí o haz clic para seleccionar",
+    "dropzoneFormats": "PDF, DOCX o TXT (máx. 10 MB)",
+    "sourceLanguage": "Idioma original",
+    "targetLanguage": "Idioma destino",
+    "uploading": "Subiendo y traduciendo...",
+    "uploadSuccess": "Documento subido y traducido correctamente",
+    "uploadError": "Error al procesar el documento",
+    "viewer": {
+      "original": "Texto original",
+      "translated": "Traducción",
+      "downloadTxt": "Descargar TXT",
+      "downloadPdf": "Descargar PDF",
+      "noTranslation": "Traducción no disponible"
+    }
+  },
+  "theme": {
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema"
+  }
+}

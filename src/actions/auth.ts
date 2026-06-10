@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { signIn, signOut } from "@/lib/auth"
+import { logActivity } from "@/services/activity-service"
 
 export async function registerUser(formData: FormData) {
   const name = formData.get("name") as string
@@ -29,9 +30,15 @@ export async function registerUser(formData: FormData) {
 
   const hashedPassword = await bcrypt.hash(password, 12)
 
-  await prisma.user.create({
+  const user = await prisma.user.create({
     data: { name, email, password: hashedPassword },
   })
+
+  await logActivity({
+    userId: user.id,
+    type: "user_registered",
+    detail: `Usuario "${name}" registrado`,
+  }).catch(() => {})
 
   await signIn("credentials", { email, password, redirect: false })
 
@@ -48,12 +55,33 @@ export async function loginUser(formData: FormData) {
 
   try {
     await signIn("credentials", { email, password, redirect: false })
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true },
+    })
+
+    if (user) {
+      await logActivity({
+        userId: user.id,
+        type: "user_login",
+        detail: `Inicio de sesión de "${user.name}"`,
+      }).catch(() => {})
+    }
+
     return { success: true }
   } catch {
     return { error: "Credenciales inválidas" }
   }
 }
 
-export async function logoutUser() {
+export async function logoutUser(userId?: string) {
+  if (userId) {
+    await logActivity({
+      userId,
+      type: "user_logout",
+      detail: "Cierre de sesión",
+    }).catch(() => {})
+  }
   await signOut({ redirect: false })
 }

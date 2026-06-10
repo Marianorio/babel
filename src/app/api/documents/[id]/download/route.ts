@@ -1,8 +1,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { join } from "path"
-import { readFile } from "fs/promises"
 import { NextResponse } from "next/server"
+import { logActivity } from "@/services/activity-service"
 
 export async function GET(
   _request: Request,
@@ -28,6 +27,13 @@ export async function GET(
       { status: 400 }
     )
   }
+
+  await logActivity({
+    userId: session.user.id,
+    type: "document_downloaded",
+    detail: `"${document.originalName}" descargado (TXT)`,
+    documentId: document.id,
+  }).catch(() => {})
 
   const ext = document.originalName.split(".").pop()
   const downloadName = document.originalName.replace(

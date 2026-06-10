@@ -17,6 +17,8 @@ export interface Document {
   translatedText: string | null
   status: string
   fileSize: number
+  wordCount: number
+  charCount: number
   createdAt: Date
   updatedAt: Date
 }

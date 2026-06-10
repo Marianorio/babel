@@ -12,12 +12,82 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Loader2, User } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Loader2, User, Palette, Globe } from "lucide-react"
 import { toast } from "sonner"
 import { updateUserProfile } from "@/actions/documents"
+import { useTheme } from "next-themes"
 
-export function SettingsForm({ user }: { user: { name: string; email: string } }) {
+interface UserData {
+  name: string
+  email: string
+  language: string
+  theme: string
+  timezone: string | null
+  country: string | null
+  translationProvider: string
+}
+
+const TIMEZONES = Intl.supportedValuesOf?.("timeZone") || [
+  "America/Mexico_City",
+  "America/Argentina/Buenos_Aires",
+  "America/Santiago",
+  "America/Bogota",
+  "America/Lima",
+  "America/Sao_Paulo",
+  "Europe/Madrid",
+  "Europe/London",
+  "UTC",
+]
+
+const COUNTRIES = [
+  { value: "AR", label: "Argentina" },
+  { value: "BO", label: "Bolivia" },
+  { value: "CL", label: "Chile" },
+  { value: "CO", label: "Colombia" },
+  { value: "CR", label: "Costa Rica" },
+  { value: "CU", label: "Cuba" },
+  { value: "DO", label: "República Dominicana" },
+  { value: "EC", label: "Ecuador" },
+  { value: "ES", label: "España" },
+  { value: "GT", label: "Guatemala" },
+  { value: "HN", label: "Honduras" },
+  { value: "MX", label: "México" },
+  { value: "NI", label: "Nicaragua" },
+  { value: "PA", label: "Panamá" },
+  { value: "PE", label: "Perú" },
+  { value: "PR", label: "Puerto Rico" },
+  { value: "PY", label: "Paraguay" },
+  { value: "SV", label: "El Salvador" },
+  { value: "US", label: "Estados Unidos" },
+  { value: "UY", label: "Uruguay" },
+  { value: "VE", label: "Venezuela" },
+]
+
+const LANGUAGES = [
+  { value: "es", label: "Español" },
+  { value: "en", label: "English" },
+]
+
+const PROVIDERS = [
+  { value: "mock", label: "Mock (simulado)" },
+  { value: "libretranslate", label: "LibreTranslate (gratuito)" },
+  { value: "argos", label: "Argos (auto-hospedado)" },
+  { value: "deepseek", label: "DeepSeek" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "gemini", label: "Gemini (gratuito)" },
+  { value: "openai", label: "OpenAI" },
+]
+
+export function SettingsForm({ user }: { user: UserData }) {
   const router = useRouter()
+  const { setTheme } = useTheme()
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -33,23 +103,26 @@ export function SettingsForm({ user }: { user: { name: string; email: string } }
       return
     }
 
+    const newTheme = formData.get("theme") as string
+    if (newTheme) setTheme(newTheme)
+
     toast.success("Perfil actualizado")
     router.refresh()
     setLoading(false)
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <User className="h-5 w-5" />
-          Información personal
-        </CardTitle>
-        <CardDescription>
-          Actualiza tu nombre y otros datos personales.
-        </CardDescription>
-      </CardHeader>
-          <form key={user.name} onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit}>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <User className="h-5 w-5" />
+            Información personal
+          </CardTitle>
+          <CardDescription>
+            Actualiza tu nombre y otros datos personales.
+          </CardDescription>
+        </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Nombre</Label>
@@ -74,13 +147,118 @@ export function SettingsForm({ user }: { user: { name: string; email: string } }
             </p>
           </div>
         </CardContent>
-        <CardContent>
-          <Button type="submit" disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Guardar cambios
-          </Button>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Palette className="h-5 w-5" />
+            Preferencias
+          </CardTitle>
+          <CardDescription>
+            Configura tu idioma, tema y región.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="language">Idioma de la interfaz</Label>
+            <Select name="language" defaultValue={user.language}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LANGUAGES.map((l) => (
+                  <SelectItem key={l.value} value={l.value}>
+                    {l.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="theme">Tema</Label>
+            <Select name="theme" defaultValue={user.theme}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">Claro</SelectItem>
+                <SelectItem value="dark">Oscuro</SelectItem>
+                <SelectItem value="system">Sistema</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="timezone">Zona horaria</Label>
+            <Select name="timezone" defaultValue={user.timezone || ""}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar zona horaria" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMEZONES.map((tz) => (
+                  <SelectItem key={tz} value={tz}>
+                    {tz}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="country">País</Label>
+            <Select name="country" defaultValue={user.country || ""}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar país" />
+              </SelectTrigger>
+              <SelectContent>
+                {COUNTRIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
-      </form>
-    </Card>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Globe className="h-5 w-5" />
+            Proveedor de traducción
+          </CardTitle>
+          <CardDescription>
+            Selecciona el proveedor de IA para las traducciones.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="translationProvider">Proveedor</Label>
+            <Select
+              name="translationProvider"
+              defaultValue={user.translationProvider || "mock"}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDERS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <CardContent className="px-0">
+        <Button type="submit" disabled={loading}>
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Guardar cambios
+        </Button>
+      </CardContent>
+    </form>
   )
 }

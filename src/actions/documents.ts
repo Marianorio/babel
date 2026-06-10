@@ -5,13 +5,27 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { writeFile, mkdir } from "fs/promises"
 import { join, extname } from "path"
-import { translationService } from "@/services/translation-service"
+import { TranslationService, type TranslationProvider } from "@/services/translation-service"
+import { logActivity } from "@/services/activity-service"
+import { validateMime } from "@/lib/mime-validator"
+import { rateLimit } from "@/lib/rate-limit"
 
-const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"]
+const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp"]
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"]
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 
 function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_")
+}
+
+function countWords(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0
+}
+
+async function extractTextFromImage(buffer: Buffer): Promise<string> {
+  const Tesseract = await import("tesseract.js")
+  const { data } = await Tesseract.recognize(buffer, "spa+eng")
+  return data.text.replace(/\0/g, "")
 }
 
 export async function uploadDocument(formData: FormData) {
@@ -28,20 +42,31 @@ export async function uploadDocument(formData: FormData) {
 
   const extension = "." + file.name.split(".").pop()?.toLowerCase()
   if (!ALLOWED_EXTENSIONS.includes(extension)) {
-    return { error: "Formato no permitido. Usa PDF, DOCX o TXT." }
+    return { error: "Formato no permitido. Usa PDF, DOCX, TXT, PNG o JPG." }
   }
 
   if (file.size > MAX_FILE_SIZE) {
     return { error: "El archivo excede el tamaño máximo de 10 MB" }
   }
 
+  const rateCheck = rateLimit(`upload:${session.user.id}`, 10, 60000)
+  if (!rateCheck.allowed) {
+    return { error: "Demasiadas solicitudes. Intenta de nuevo en un minuto." }
+  }
+
   const bytes = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)
   const ext = extname(file.name).toLowerCase()
 
+  if (!validateMime(buffer, ext.replace(".", ""))) {
+    return { error: "El archivo no coincide con el formato declarado o está corrupto." }
+  }
+
   let originalText = ""
   try {
-    if (ext === ".pdf") {
+    if (IMAGE_EXTENSIONS.includes(ext)) {
+      originalText = await extractTextFromImage(buffer)
+    } else if (ext === ".pdf") {
       const pdfjsLib = await import("pdfjs-dist")
       pdfjsLib.GlobalWorkerOptions.workerSrc = ""
       const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
@@ -75,6 +100,9 @@ export async function uploadDocument(formData: FormData) {
   const filePath = join(uploadDir, storedName)
   await writeFile(filePath, buffer)
 
+  const wordCount = countWords(originalText)
+  const charCount = originalText.length
+
   let document
   try {
     document = await prisma.document.create({
@@ -87,14 +115,25 @@ export async function uploadDocument(formData: FormData) {
         originalText,
         status: "processing",
         fileSize: file.size,
+        wordCount,
+        charCount,
       },
     })
   } catch {
     return { error: "Error al guardar el documento. El archivo podría tener un formato no compatible." }
   }
 
+  const userPrefs = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { translationProvider: true },
+  })
+
+  const service = new TranslationService(
+    userPrefs?.translationProvider as TranslationProvider | undefined
+  )
+
   try {
-    const result = await translationService.translate({
+    const result = await service.translate({
       text: originalText,
       sourceLanguage,
       targetLanguage,
@@ -106,6 +145,14 @@ export async function uploadDocument(formData: FormData) {
         translatedText: result.translatedText,
         status: "completed",
       },
+    })
+
+    await logActivity({
+      userId: session.user.id,
+      type: "document_translated",
+      detail: `"${file.name}" traducido de ${sourceLanguage.toUpperCase()} a ${targetLanguage.toUpperCase()}`,
+      documentId: document.id,
+      metadata: { sourceLanguage, targetLanguage, wordCount, charCount },
     })
   } catch {
     await prisma.document.update({
@@ -144,9 +191,22 @@ export async function deleteDocument(id: string) {
   const session = await auth()
   if (!session?.user?.id) return { error: "No autorizado" }
 
+  const doc = await prisma.document.findFirst({
+    where: { id, userId: session.user.id },
+    select: { originalName: true },
+  })
+
   await prisma.document.deleteMany({
     where: { id, userId: session.user.id },
   })
+
+  if (doc) {
+    await logActivity({
+      userId: session.user.id,
+      type: "document_deleted",
+      detail: `"${doc.originalName}" eliminado`,
+    })
+  }
 
   revalidatePath("/dashboard/documents")
   return { success: true }
@@ -161,10 +221,34 @@ export async function updateUserProfile(formData: FormData) {
     return { error: "El nombre debe tener al menos 2 caracteres" }
   }
 
+  const data: Record<string, string> = { name }
+
+  const language = formData.get("language") as string
+  if (language) data.language = language
+
+  const theme = formData.get("theme") as string
+  if (theme) data.theme = theme
+
+  const timezone = formData.get("timezone") as string
+  if (timezone) data.timezone = timezone
+
+  const country = formData.get("country") as string
+  if (country) data.country = country
+
+  const translationProvider = formData.get("translationProvider") as string
+  if (translationProvider) data.translationProvider = translationProvider
+
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { name },
+    data,
   })
+
+  await logActivity({
+    userId: session.user.id,
+    type: "profile_updated",
+    detail: `Perfil actualizado`,
+    metadata: { changes: Object.keys(data).join(", ") },
+  }).catch(() => {})
 
   revalidatePath("/dashboard/settings")
   revalidatePath("/dashboard")
@@ -205,6 +289,12 @@ export async function updateUserPassword(formData: FormData) {
     where: { id: session.user.id },
     data: { password: hashedPassword },
   })
+
+  await logActivity({
+    userId: session.user.id,
+    type: "password_changed",
+    detail: "Contraseña actualizada",
+  }).catch(() => {})
 
   return { success: true }
 }
