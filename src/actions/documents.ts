@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { writeFile, mkdir } from "fs/promises"
-import { join } from "path"
+import { join, extname } from "path"
 import { translationService } from "@/services/translation-service"
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"]
@@ -37,7 +37,25 @@ export async function uploadDocument(formData: FormData) {
 
   const bytes = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)
-  const originalText = buffer.toString("utf-8")
+  const ext = extname(file.name).toLowerCase()
+
+  let originalText = ""
+  try {
+    if (ext === ".pdf") {
+      const { PDFParse } = await import("pdf-parse")
+      const pdf = new PDFParse(new Uint8Array(buffer))
+      const textResult = await pdf.getText()
+      originalText = (typeof textResult === "string" ? textResult : textResult.text).replace(/\0/g, "")
+    } else if (ext === ".docx") {
+      const mammoth = await import("mammoth")
+      const result = await mammoth.extractRawText({ buffer })
+      originalText = result.value.replace(/\0/g, "")
+    } else {
+      originalText = buffer.toString("utf-8").replace(/\0/g, "")
+    }
+  } catch {
+    return { error: `No se pudo extraer el texto del archivo ${ext}. Asegúrate de que no esté protegido o dañado.` }
+  }
 
   const storedName = `${Date.now()}-${sanitizeFileName(file.name)}`
   const uploadDir = join(process.cwd(), "uploads")
@@ -47,18 +65,23 @@ export async function uploadDocument(formData: FormData) {
   const filePath = join(uploadDir, storedName)
   await writeFile(filePath, buffer)
 
-  const document = await prisma.document.create({
-    data: {
-      userId: session.user.id,
-      originalName: file.name,
-      storedName,
-      sourceLanguage,
-      targetLanguage,
-      originalText,
-      status: "processing",
-      fileSize: file.size,
-    },
-  })
+  let document
+  try {
+    document = await prisma.document.create({
+      data: {
+        userId: session.user.id,
+        originalName: file.name,
+        storedName,
+        sourceLanguage,
+        targetLanguage,
+        originalText,
+        status: "processing",
+        fileSize: file.size,
+      },
+    })
+  } catch {
+    return { error: "Error al guardar el documento. El archivo podría tener un formato no compatible." }
+  }
 
   try {
     const result = await translationService.translate({
