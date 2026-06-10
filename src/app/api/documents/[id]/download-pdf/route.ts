@@ -52,6 +52,16 @@ export async function GET(
     const margin = 56.69
     const contentWidth = pageWidth - 2 * margin
 
+    function sanitizeForPdf(text: string): string {
+      return text
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u2013\u2014]/g, "-")
+        .replace(/\u2022/g, "-")
+        .replace(/\u2026/g, "...")
+        .replace(/[^\x20-\x7E\xA0-\xFF\u00F1\u00D1\u00E1\u00C1\u00E9\u00C9\u00ED\u00CD\u00F3\u00D3\u00FA\u00DA\u00FC\u00DC\u00BF\u00A1]/g, "")
+    }
+
     let pageNumber = 0
 
     function addHeaderFooter(page: PDFPage, title: string) {
@@ -129,6 +139,9 @@ export async function GET(
       return lines
     }
 
+    const safeOriginalText = sanitizeForPdf(document.originalText)
+    const safeTranslatedText = sanitizeForPdf(document.translatedText)
+
     // Cover page
     const coverPage = pdfDoc.addPage([pageWidth, pageHeight])
     coverPage.drawRectangle({
@@ -185,7 +198,7 @@ export async function GET(
     })
 
     // Original text pages
-    const origLines = wrapText(document.originalText, helvetica, 10, contentWidth)
+    const origLines = wrapText(safeOriginalText, helvetica, 10, contentWidth)
     const linesPerPage = Math.floor((pageHeight - 2 * margin - 80) / 16)
     for (let i = 0; i < origLines.length; i += linesPerPage) {
       const page = pdfDoc.addPage([pageWidth, pageHeight])
@@ -209,7 +222,7 @@ export async function GET(
     }
 
     // Translated text pages
-    const transLines = wrapText(document.translatedText, helvetica, 10, contentWidth)
+    const transLines = wrapText(safeTranslatedText, helvetica, 10, contentWidth)
     for (let i = 0; i < transLines.length; i += linesPerPage) {
       const page = pdfDoc.addPage([pageWidth, pageHeight])
       addHeaderFooter(page, "Traducción")
@@ -244,9 +257,11 @@ export async function GET(
         "Content-Disposition": `attachment; filename="${downloadName}"`,
       },
     })
-  } catch {
+  } catch (error) {
+    console.error("Error generando PDF:", error instanceof Error ? error.message : error)
+    console.error("Stack:", error instanceof Error ? error.stack : "N/A")
     return NextResponse.json(
-      { error: "Error al generar el PDF" },
+      { error: "Error al generar el PDF", detail: error instanceof Error ? error.message : "Error desconocido" },
       { status: 500 }
     )
   }

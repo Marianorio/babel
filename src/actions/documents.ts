@@ -67,9 +67,9 @@ export async function uploadDocument(formData: FormData) {
     if (IMAGE_EXTENSIONS.includes(ext)) {
       originalText = await extractTextFromImage(buffer)
     } else if (ext === ".pdf") {
-      const pdfjsLib = await import("pdfjs-dist")
-      pdfjsLib.GlobalWorkerOptions.workerSrc = ""
-      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
+      const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs")
+      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) })
+      const doc = await loadingTask.promise
       const pages: string[] = []
       for (let i = 1; i <= doc.numPages; i++) {
         const page = await doc.getPage(i)
