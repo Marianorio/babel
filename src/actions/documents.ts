@@ -42,10 +42,20 @@ export async function uploadDocument(formData: FormData) {
   let originalText = ""
   try {
     if (ext === ".pdf") {
-      const { PDFParse } = await import("pdf-parse")
-      const pdf = new PDFParse(new Uint8Array(buffer))
-      const textResult = await pdf.getText()
-      originalText = (typeof textResult === "string" ? textResult : textResult.text).replace(/\0/g, "")
+      const pdfjsLib = await import("pdfjs-dist")
+      pdfjsLib.GlobalWorkerOptions.workerSrc = ""
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
+      const pages: string[] = []
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i)
+        const content = await page.getTextContent()
+        const text = (content.items as { str?: string }[])
+          .filter((item) => "str" in item)
+          .map((item) => item.str ?? "")
+          .join(" ")
+        pages.push(text)
+      }
+      originalText = pages.join("\n\n").replace(/\0/g, "")
     } else if (ext === ".docx") {
       const mammoth = await import("mammoth")
       const result = await mammoth.extractRawText({ buffer })
