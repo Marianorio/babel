@@ -49,7 +49,7 @@ export function SettingsForm({ user }: { user: { name: string; email: string } }
           Actualiza tu nombre y otros datos personales.
         </CardDescription>
       </CardHeader>
-      <form onSubmit={handleSubmit}>
+          <form key={user.name} onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Nombre</Label>

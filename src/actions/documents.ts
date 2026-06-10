@@ -157,6 +157,7 @@ export async function updateUserProfile(formData: FormData) {
   })
 
   revalidatePath("/dashboard/settings")
+  revalidatePath("/dashboard")
   return { success: true }
 }
 

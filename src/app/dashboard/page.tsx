@@ -11,6 +11,11 @@ export default async function DashboardPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true },
+  })
+
   const totalDocs = await prisma.document.count({
     where: { userId: session.user.id },
   })
@@ -57,7 +62,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
-          Bienvenido, {session.user.name}. Resumen de tu actividad.
+          Bienvenido, {user?.name || session.user.name}. Resumen de tu actividad.
         </p>
       </div>
 
