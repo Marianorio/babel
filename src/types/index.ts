@@ -1,0 +1,33 @@
+export interface User {
+  id: string
+  name: string
+  email: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface Document {
+  id: string
+  userId: string
+  originalName: string
+  storedName: string
+  sourceLanguage: string
+  targetLanguage: string
+  originalText: string
+  translatedText: string | null
+  status: string
+  fileSize: number
+  createdAt: Date
+  updatedAt: Date
+}
+
+export type Language = "es" | "en" | "pt" | "fr"
+
+export const LANGUAGES: Record<Language, string> = {
+  es: "Español",
+  en: "Inglés",
+  pt: "Portugués",
+  fr: "Francés",
+}
+
+export type DocumentStatus = "pending" | "processing" | "completed" | "error"
