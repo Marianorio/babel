@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatDate, formatFileSize } from "@/lib/utils"
+import { PdfOverlayViewer } from "./pdf-overlay-viewer"
 import type { Document } from "@/types"
 
 const statusConfig = {
@@ -107,6 +108,60 @@ function OriginalDocumentViewer({ document: doc }: { document: Document }) {
     <pre className="whitespace-pre-wrap text-sm leading-relaxed">
       {doc.originalText}
     </pre>
+  )
+}
+
+function TranslatedDocumentViewer({ document: doc }: { document: Document }) {
+  const ext = getFileExt(doc.originalName)
+  const [overlayLoading, setOverlayLoading] = useState(true)
+
+  if (!doc.translatedText) {
+    if (doc.status === "processing") {
+      return (
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
+            <Clock className="h-6 w-6 text-muted-foreground animate-pulse" />
+          </div>
+          <p className="text-sm text-muted-foreground">Procesando traducción...</p>
+        </div>
+      )
+    }
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
+          <AlertCircle className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {doc.status === "error"
+            ? "Ocurrió un error durante la traducción."
+            : "La traducción no está disponible."}
+        </p>
+      </div>
+    )
+  }
+
+  if (ext === ".pdf") {
+    const pdfSrc = doc.pageRange ? `/api/files/${doc.id}/pdf-pages` : `/api/files/${doc.id}`
+    return (
+      <div className="space-y-4">
+        <PdfOverlayViewer
+          pdfSrc={pdfSrc}
+          translatedText={doc.translatedText}
+          totalPages={doc.pageCount || 0}
+          onLoadingChange={setOverlayLoading}
+        />
+        {overlayLoading && (
+          <div className="flex items-center justify-center gap-2 py-4">
+            <Clock className="h-4 w-4 animate-pulse text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Aplicando traducción sobre el PDF...</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <pre className="whitespace-pre-wrap text-sm leading-relaxed">{doc.translatedText}</pre>
   )
 }
 
@@ -211,31 +266,7 @@ export function TranslationViewer({ document }: { document: Document }) {
             </Badge>
           </div>
           <div className="p-4">
-            {document.translatedText ? (
-              <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-                {document.translatedText}
-              </pre>
-            ) : document.status === "processing" ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-                  <Clock className="h-6 w-6 text-muted-foreground animate-pulse" />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Procesando traducción...
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3 py-16 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-                  <AlertCircle className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {document.status === "error"
-                    ? "Ocurrió un error durante la traducción."
-                    : "La traducción no está disponible."}
-                </p>
-              </div>
-            )}
+            <TranslatedDocumentViewer document={document} />
           </div>
         </div>
       </div>
