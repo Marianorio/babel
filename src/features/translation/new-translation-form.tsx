@@ -1,8 +1,9 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -12,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, FileText, X, Loader2, Languages, ArrowRight } from "lucide-react"
+import { Upload, FileText, X, Loader2, Languages, ArrowRight, File, FileSpreadsheet } from "lucide-react"
 import { toast } from "sonner"
 import { uploadDocument } from "@/actions/documents"
 import { LANGUAGES } from "@/types"
@@ -24,14 +25,99 @@ const ALLOWED_TYPES = [
   "text/plain",
 ]
 
+const PROVIDERS = [
+  { value: "mock", label: "Mock (simulado)" },
+  { value: "libretranslate", label: "LibreTranslate (gratuito)" },
+  { value: "argos", label: "Argos (auto-hospedado)" },
+  { value: "deepseek", label: "DeepSeek" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "gemini", label: "Gemini (gratuito)" },
+  { value: "openai", label: "OpenAI" },
+]
+
 export function NewTranslationForm() {
   const router = useRouter()
   const [file, setFile] = useState<File | null>(null)
   const [sourceLanguage, setSourceLanguage] = useState<string | null>(null)
   const [targetLanguage, setTargetLanguage] = useState<string | null>(null)
+  const [provider, setProvider] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+
+  const [pageRange, setPageRange] = useState("")
+  const [pdfPages, setPdfPages] = useState(0)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [textContent, setTextContent] = useState<string | null>(null)
+  const [docxHtml, setDocxHtml] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!file) {
+      setPdfPages(0)
+      setPageRange("")
+      setPreviewUrl(null)
+      setTextContent(null)
+      setDocxHtml(null)
+      return
+    }
+
+    const name = file.name.toLowerCase()
+
+    if (file.type === "application/pdf" || name.endsWith(".pdf")) {
+      setTextContent(null)
+      setDocxHtml(null)
+
+      const url = URL.createObjectURL(file)
+      setPreviewUrl(url)
+
+      async function getPageCount() {
+        try {
+          const pdfjs = await import("pdfjs-dist")
+          pdfjs.GlobalWorkerOptions.workerSrc =
+            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/" + pdfjs.version + "/pdf.worker.min.mjs"
+          const doc = await pdfjs.getDocument({ url }).promise
+          setPdfPages(doc.numPages)
+        } catch {
+          setPdfPages(0)
+        }
+      }
+
+      getPageCount()
+
+      return () => { URL.revokeObjectURL(url) }
+    }
+
+    if (file.type === "text/plain" || name.endsWith(".txt")) {
+      setPdfPages(0)
+      setPageRange("")
+      setPreviewUrl(null)
+      setDocxHtml(null)
+
+      const reader = new FileReader()
+      reader.onload = () => setTextContent(reader.result as string)
+      reader.readAsText(file)
+      return
+    }
+
+    if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || name.endsWith(".docx")) {
+      setPdfPages(0)
+      setPageRange("")
+      setPreviewUrl(null)
+      setTextContent(null)
+
+      const reader = new FileReader()
+      reader.onload = async () => {
+        try {
+          const mammoth = await import("mammoth")
+          const result = await mammoth.convertToHtml({ arrayBuffer: reader.result as ArrayBuffer })
+          setDocxHtml(result.value)
+        } catch {
+          setDocxHtml(null)
+        }
+      }
+      reader.readAsArrayBuffer(file)
+      return
+    }
+  }, [file])
 
   function handleFileDrop(e: React.DragEvent) {
     e.preventDefault()
@@ -73,6 +159,8 @@ export function NewTranslationForm() {
     formData.append("file", file)
     formData.append("sourceLanguage", sourceLanguage)
     formData.append("targetLanguage", targetLanguage)
+    if (provider) formData.append("translationProvider", provider)
+    if (pageRange.trim()) formData.append("pages", pageRange.trim())
 
     const result = await uploadDocument(formData)
 
@@ -86,6 +174,11 @@ export function NewTranslationForm() {
     router.push(`/dashboard/translation/${result.documentId}`)
     router.refresh()
   }
+
+  const fileName = file?.name?.toLowerCase() || ""
+  const isPdf = file?.type === "application/pdf" || fileName.endsWith(".pdf")
+  const isTxt = file?.type === "text/plain" || fileName.endsWith(".txt")
+  const isDocx = file?.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || fileName.endsWith(".docx")
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
@@ -158,9 +251,10 @@ export function NewTranslationForm() {
               Formatos: PDF, DOCX, TXT (máx. 10 MB).
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div
-              className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 transition-all duration-300 ${
+          <CardContent className="space-y-4">
+            <label
+              htmlFor="file-upload"
+              className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 transition-all duration-300 cursor-pointer ${
                 dragOver
                   ? "border-primary bg-primary/5 scale-[1.02]"
                   : "border-border hover:border-primary/50 hover:bg-primary/5"
@@ -171,10 +265,9 @@ export function NewTranslationForm() {
               }}
               onDragLeave={() => setDragOver(false)}
               onDrop={handleFileDrop}
-              onClick={() => inputRef.current?.click()}
             >
               <input
-                ref={inputRef}
+                id="file-upload"
                 type="file"
                 accept=".pdf,.docx,.txt"
                 className="hidden"
@@ -184,12 +277,13 @@ export function NewTranslationForm() {
               {file ? (
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-                    <FileText className="h-6 w-6 text-primary" />
+                    {isPdf ? <FileText className="h-6 w-6 text-primary" /> : isDocx ? <FileSpreadsheet className="h-6 w-6 text-primary" /> : <File className="h-6 w-6 text-primary" />}
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-medium">{file.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {(file.size / 1024 / 1024).toFixed(2)} MB
+                      {pdfPages > 0 && ` · ${pdfPages} páginas`}
                     </p>
                   </div>
                   <Button
@@ -198,6 +292,7 @@ export function NewTranslationForm() {
                     size="icon"
                     className="shrink-0"
                     onClick={(e) => {
+                      e.preventDefault()
                       e.stopPropagation()
                       setFile(null)
                     }}
@@ -218,7 +313,64 @@ export function NewTranslationForm() {
                   </p>
                 </>
               )}
-            </div>
+            </label>
+
+            {isPdf && previewUrl && (
+              <embed
+                src={previewUrl}
+                type="application/pdf"
+                className="w-full rounded-lg border border-border"
+                style={{ height: "500px" }}
+              />
+            )}
+
+            {isTxt && textContent !== null && (
+              <pre className="max-h-96 w-full overflow-auto rounded-lg border border-border bg-muted/30 p-4 text-sm whitespace-pre-wrap">
+                {textContent}
+              </pre>
+            )}
+
+            {isDocx && docxHtml !== null && (
+              <div
+                className="max-h-96 w-full overflow-auto rounded-lg border border-border bg-white p-4 text-sm prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: docxHtml }}
+              />
+            )}
+
+            {isPdf && pdfPages > 0 && (
+              <div className="flex items-center gap-3">
+                <Label className="shrink-0 text-sm font-medium">Páginas:</Label>
+                <Input
+                  placeholder="Ej: 1-3, 5, 7-9 (vacío = todas)"
+                  value={pageRange}
+                  onChange={(e) => setPageRange(e.target.value)}
+                  className="max-w-xs"
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Proveedor de traducción</CardTitle>
+            <CardDescription>
+              Opcional. Si no seleccionas ninguno, se usará el configurado en Settings.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Select value={provider} onValueChange={setProvider}>
+              <SelectTrigger>
+                <SelectValue placeholder="Usar el de Settings" />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDERS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </CardContent>
         </Card>
 

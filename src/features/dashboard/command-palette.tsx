@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import { Search, FileText, Languages, LayoutDashboard, Settings } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useCommandPalette } from "@/hooks/use-command-palette"
@@ -40,23 +40,36 @@ export function CommandPalette({ onClose }: Props) {
     },
   ]
 
-  const { open, setOpen, query, setQuery, filtered } =
-    useCommandPalette(commands)
+  const { query, setQuery, filtered } = useCommandPalette(commands)
 
-  // Sync internal open state with parent
-  useEffect(() => {
-    if (!open) onClose()
-  }, [open, onClose])
+  const handleClose = useCallback(() => {
+    setQuery("")
+    onClose()
+  }, [onClose, setQuery])
 
   useEffect(() => {
-    if (inputRef.current) inputRef.current.focus()
+    inputRef.current?.focus()
   }, [])
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        handleClose()
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        handleClose()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleClose])
 
   return (
     <>
       <div
         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-        onClick={() => { setOpen(false); setQuery(""); onClose() }}
+        onClick={handleClose}
       />
       <div className="fixed left-1/2 top-1/4 z-50 w-full max-w-lg -translate-x-1/2">
         <div className="rounded-xl border border-border bg-card shadow-2xl">

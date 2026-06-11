@@ -1,3 +1,12 @@
+import { rateLimit } from "@/lib/rate-limit"
+
+export class TranslationError extends Error {
+  constructor(message?: string) {
+    super(message || "Límite de intentos alcanzado. Cambia de proveedor o intenta más tarde.")
+    this.name = "TranslationError"
+  }
+}
+
 export type TranslationProvider = "deepseek" | "openrouter" | "gemini" | "openai" | "libretranslate" | "argos" | "mock"
 
 interface TranslationResult {
@@ -94,7 +103,7 @@ export class TranslationService {
   ): Promise<TranslationResult> {
     const apiKey = process.env.DEEPSEEK_API_KEY
     if (!apiKey) {
-      return this.translateWithMock(request)
+      throw new TranslationError("DeepSeek no configurado. Añade DEEPSEEK_API_KEY en .env.")
     }
 
     const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -118,6 +127,10 @@ export class TranslationService {
       }),
     })
 
+    if (!response.ok) {
+      throw new TranslationError("Error en DeepSeek: " + response.status)
+    }
+
     const data = await response.json()
     return {
       translatedText: data.choices[0].message.content,
@@ -130,7 +143,7 @@ export class TranslationService {
   ): Promise<TranslationResult> {
     const apiKey = process.env.OPENROUTER_API_KEY
     if (!apiKey) {
-      return this.translateWithMock(request)
+      throw new TranslationError("OpenRouter no configurado. Añade OPENROUTER_API_KEY en .env.")
     }
 
     const response = await fetch(
@@ -157,6 +170,10 @@ export class TranslationService {
       }
     )
 
+    if (!response.ok) {
+      throw new TranslationError("Error en OpenRouter: " + response.status)
+    }
+
     const data = await response.json()
     return {
       translatedText: data.choices[0].message.content,
@@ -169,11 +186,21 @@ export class TranslationService {
   ): Promise<TranslationResult> {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) {
-      return this.translateWithMock(request)
+      throw new TranslationError("Gemini no configurado. Añade GEMINI_API_KEY en .env.")
     }
 
+    const rateCheck = rateLimit("gemini:direct", 50, 60000)
+    if (!rateCheck.allowed) {
+      throw new TranslationError("Límite de intentos alcanzado para Gemini. Espera un momento o cambia de proveedor.")
+    }
+
+    const text =
+      request.text.length > 10000
+        ? request.text.slice(0, 10000) + "..."
+        : request.text
+
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`,
+      "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=" + apiKey,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -182,7 +209,7 @@ export class TranslationService {
             {
               parts: [
                 {
-                  text: `Traduce el siguiente texto legal de ${LANGUAGE_MAP[request.sourceLanguage] || request.sourceLanguage} a ${LANGUAGE_MAP[request.targetLanguage] || request.targetLanguage}. Mantén el formato legal:\n\n${request.text}`,
+                  text: "Traduce el siguiente texto de " + (LANGUAGE_MAP[request.sourceLanguage] || request.sourceLanguage) + " a " + (LANGUAGE_MAP[request.targetLanguage] || request.targetLanguage) + ". Devuelve solo la traducción, sin explicaciones ni prefijos:\n\n" + text,
                 },
               ],
             },
@@ -191,11 +218,21 @@ export class TranslationService {
       }
     )
 
-    const data = await response.json()
-    return {
-      translatedText: data.candidates[0].content.parts[0].text,
-      provider: "gemini",
+    if (!response.ok) {
+      const errText = await response.text()
+      if (response.status === 429) {
+        throw new TranslationError("Límite de intentos alcanzado para Gemini. Espera un momento o cambia de proveedor.")
+      }
+      throw new TranslationError("Error en Gemini (" + response.status + "): " + errText)
     }
+
+    const data = await response.json()
+    const translatedText = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!translatedText) {
+      throw new TranslationError("Gemini no devolvió una traducción válida.")
+    }
+
+    return { translatedText, provider: "gemini" }
   }
 
   private async translateWithOpenAI(
@@ -203,7 +240,7 @@ export class TranslationService {
   ): Promise<TranslationResult> {
     const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey) {
-      return this.translateWithMock(request)
+      throw new TranslationError("OpenAI no configurado. Añade OPENAI_API_KEY en .env.")
     }
 
     const response = await fetch(
@@ -227,6 +264,10 @@ export class TranslationService {
       }
     )
 
+    if (!response.ok) {
+      throw new TranslationError("Error en OpenAI: " + response.status)
+    }
+
     const data = await response.json()
     return {
       translatedText: data.choices[0].message.content,
@@ -237,38 +278,84 @@ export class TranslationService {
   private async translateWithLibreTranslate(
     request: TranslationRequest
   ): Promise<TranslationResult> {
-    const baseUrl = process.env.LIBRETRANSLATE_URL || "https://libretranslate.com"
-    const apiKey = process.env.LIBRETRANSLATE_API_KEY
+    const baseUrl = process.env.LIBRETRANSLATE_URL
+    const ltApiKey = process.env.LIBRETRANSLATE_API_KEY
 
-    try {
-      const response = await fetch(`${baseUrl}/translate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
-        },
-        body: JSON.stringify({
-          q: request.text,
-          source: request.sourceLanguage,
-          target: request.targetLanguage,
-          format: "text",
-        }),
-      })
+    if (baseUrl) {
+      try {
+        const response = await fetch(`${baseUrl}/translate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(ltApiKey && { Authorization: `Bearer ${ltApiKey}` }),
+          },
+          body: JSON.stringify({
+            q: request.text,
+            source: request.sourceLanguage,
+            target: request.targetLanguage,
+            format: "text",
+          }),
+        })
 
-      if (!response.ok) {
-        console.warn(`LibreTranslate error (${response.status}), falling back to mock`)
-        return this.translateWithMock(request)
+        if (response.ok) {
+          const data = await response.json()
+          return { translatedText: data.translatedText, provider: "libretranslate" }
+        }
+      } catch {
+        console.warn("LibreTranslate instance unavailable")
       }
-
-      const data = await response.json()
-      return {
-        translatedText: data.translatedText,
-        provider: "libretranslate",
-      }
-    } catch {
-      console.warn("LibreTranslate unavailable, falling back to mock")
-      return this.translateWithMock(request)
     }
+
+    // Fallback: Gemini 2.5 Flash Lite
+    const geminiApiKey = process.env.GEMINI_API_KEY
+    if (!geminiApiKey) {
+      throw new TranslationError("No hay ningún proveedor configurado. Configura GEMINI_API_KEY o LIBRETRANSLATE_URL en .env, o selecciona otro proveedor.")
+    }
+
+    const rateCheck = rateLimit("gemini:libretranslate", 50, 60000)
+    if (!rateCheck.allowed) {
+      throw new TranslationError("Límite de intentos alcanzado. Espera un momento o cambia de proveedor.")
+    }
+
+    const text =
+      request.text.length > 10000
+        ? request.text.slice(0, 10000) + "..."
+        : request.text
+
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=" + geminiApiKey,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: "Traduce el siguiente texto de " + (LANGUAGE_MAP[request.sourceLanguage] || request.sourceLanguage) + " a " + (LANGUAGE_MAP[request.targetLanguage] || request.targetLanguage) + ". Devuelve solo la traducción, sin explicaciones ni prefijos:\n\n" + text,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const errText = await response.text()
+      if (response.status === 429) {
+        throw new TranslationError("Límite de intentos alcanzado. Espera un momento o cambia de proveedor.")
+      }
+      throw new TranslationError("Error en traducción (" + response.status + "): " + errText)
+    }
+
+    const data = await response.json()
+    const translatedText = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!translatedText) {
+      throw new TranslationError("El proveedor no devolvió una traducción válida.")
+    }
+
+    return { translatedText, provider: "libretranslate" }
   }
 
   private async translateWithArgos(
@@ -276,30 +363,24 @@ export class TranslationService {
   ): Promise<TranslationResult> {
     const baseUrl = process.env.ARGOS_URL || "http://localhost:5000"
 
-    try {
-      const response = await fetch(`${baseUrl}/translate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          q: request.text,
-          source: request.sourceLanguage,
-          target: request.targetLanguage,
-        }),
-      })
+    const response = await fetch(`${baseUrl}/translate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        q: request.text,
+        source: request.sourceLanguage,
+        target: request.targetLanguage,
+      }),
+    })
 
-      if (!response.ok) {
-        console.warn(`Argos error (${response.status}), falling back to mock`)
-        return this.translateWithMock(request)
-      }
+    if (!response.ok) {
+      throw new TranslationError("Error en Argos (" + response.status + "). Verifica que el servidor esté corriendo.")
+    }
 
-      const data = await response.json()
-      return {
-        translatedText: data.translatedText,
-        provider: "argos",
-      }
-    } catch {
-      console.warn("Argos unavailable, falling back to mock")
-      return this.translateWithMock(request)
+    const data = await response.json()
+    return {
+      translatedText: data.translatedText,
+      provider: "argos",
     }
   }
 }

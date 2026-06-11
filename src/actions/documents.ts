@@ -5,11 +5,12 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { writeFile, mkdir } from "fs/promises"
 import { join, extname } from "path"
-import { TranslationService, type TranslationProvider } from "@/services/translation-service"
+import { TranslationService, TranslationError, type TranslationProvider } from "@/services/translation-service"
 import { logActivity } from "@/services/activity-service"
 import { validateMime } from "@/lib/mime-validator"
 import { rateLimit } from "@/lib/rate-limit"
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs"
+import { parsePageRange } from "@/lib/page-range"
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp"]
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"]
@@ -36,6 +37,8 @@ export async function uploadDocument(formData: FormData) {
   const file = formData.get("file") as File
   const sourceLanguage = formData.get("sourceLanguage") as string
   const targetLanguage = formData.get("targetLanguage") as string
+  const documentProvider = formData.get("translationProvider") as string
+  const pagesInput = formData.get("pages") as string
 
   if (!file || !sourceLanguage || !targetLanguage) {
     return { error: "Todos los campos son obligatorios" }
@@ -70,17 +73,19 @@ export async function uploadDocument(formData: FormData) {
     } else if (ext === ".pdf") {
       const loadingTask = getDocument({ data: new Uint8Array(buffer) })
       const doc = await loadingTask.promise
-      const pages: string[] = []
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i)
+      const selectedPages = pagesInput ? parsePageRange(pagesInput, doc.numPages) : []
+      const pagesToExtract = selectedPages.length > 0 ? selectedPages : Array.from({ length: doc.numPages }, (_, i) => i + 1)
+      const pageTexts: string[] = []
+      for (const pageNum of pagesToExtract) {
+        const page = await doc.getPage(pageNum)
         const content = await page.getTextContent()
         const text = (content.items as { str?: string }[])
           .filter((item) => "str" in item)
           .map((item) => item.str ?? "")
           .join(" ")
-        pages.push(text)
+        pageTexts.push(text)
       }
-      originalText = pages.join("\n\n").replace(/\0/g, "")
+      originalText = pageTexts.join("\n\n").replace(/\0/g, "")
     } else if (ext === ".docx") {
       const mammoth = await import("mammoth")
       const result = await mammoth.extractRawText({ buffer })
@@ -125,14 +130,21 @@ export async function uploadDocument(formData: FormData) {
     return { error: "Error al guardar el documento. El archivo podría tener un formato no compatible." }
   }
 
-  const userPrefs = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { translationProvider: true },
-  })
+  await logActivity({
+    userId: session.user.id,
+    type: "document_uploaded",
+    detail: `"${file.name}" subido (${sourceLanguage.toUpperCase()} → ${targetLanguage.toUpperCase()})`,
+    documentId: document.id,
+    metadata: { sourceLanguage, targetLanguage, fileSize: file.size },
+  }).catch(() => {})
 
-  const service = new TranslationService(
-    userPrefs?.translationProvider as TranslationProvider | undefined
-  )
+  const provider = (documentProvider ||
+    (await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { translationProvider: true },
+    }))?.translationProvider) as TranslationProvider | undefined
+
+  const service = new TranslationService(provider)
 
   try {
     const result = await service.translate({
@@ -156,12 +168,13 @@ export async function uploadDocument(formData: FormData) {
       documentId: document.id,
       metadata: { sourceLanguage, targetLanguage, wordCount, charCount },
     })
-  } catch {
+  } catch (err) {
     await prisma.document.update({
       where: { id: document.id },
       data: { status: "error" },
     })
-    return { error: "Error al procesar la traducción" }
+    const message = err instanceof TranslationError ? err.message : "Error al procesar la traducción"
+    return { error: message }
   }
 
   revalidatePath("/dashboard/documents")

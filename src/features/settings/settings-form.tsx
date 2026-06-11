@@ -162,7 +162,7 @@ export function SettingsForm({ user }: { user: UserData }) {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="language">Idioma de la interfaz</Label>
-            <Select name="language" defaultValue={user.language}>
+            <Select key={user.language} name="language" defaultValue={user.language}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -177,7 +177,7 @@ export function SettingsForm({ user }: { user: UserData }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="theme">Tema</Label>
-            <Select name="theme" defaultValue={user.theme}>
+            <Select key={user.theme} name="theme" defaultValue={user.theme}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -190,7 +190,7 @@ export function SettingsForm({ user }: { user: UserData }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="timezone">Zona horaria</Label>
-            <Select name="timezone" defaultValue={user.timezone || ""}>
+            <Select key={user.timezone || ""} name="timezone" defaultValue={user.timezone || ""}>
               <SelectTrigger>
                 <SelectValue placeholder="Seleccionar zona horaria" />
               </SelectTrigger>
@@ -205,7 +205,7 @@ export function SettingsForm({ user }: { user: UserData }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="country">País</Label>
-            <Select name="country" defaultValue={user.country || ""}>
+            <Select key={user.country || ""} name="country" defaultValue={user.country || ""}>
               <SelectTrigger>
                 <SelectValue placeholder="Seleccionar país" />
               </SelectTrigger>
@@ -235,6 +235,7 @@ export function SettingsForm({ user }: { user: UserData }) {
           <div className="space-y-2">
             <Label htmlFor="translationProvider">Proveedor</Label>
             <Select
+              key={user.translationProvider || "mock"}
               name="translationProvider"
               defaultValue={user.translationProvider || "mock"}
             >
