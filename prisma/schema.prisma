@@ -41,6 +41,8 @@ model Document {
   charCount      Int      @default(0)
   pageRange      String?
   pageCount      Int?
+  pageLines      String?  @db.Text
+  pageLineTranslations String?  @db.Text
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

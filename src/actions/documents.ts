@@ -68,6 +68,7 @@ export async function uploadDocument(formData: FormData) {
 
   let originalText = ""
   let pdfPageCount: number | null = null
+  let allPageLines: { pageNum: number; lines: { y: number; chars: number; texts: { str: string; x: number; width: number; height: number }[] }[] }[] = []
   try {
     if (IMAGE_EXTENSIONS.includes(ext)) {
       originalText = await extractTextFromImage(buffer)
@@ -78,14 +79,56 @@ export async function uploadDocument(formData: FormData) {
       const selectedPages = pagesInput ? parsePageRange(pagesInput, pdfPageCount) : []
       const pagesToExtract = selectedPages.length > 0 ? selectedPages : Array.from({ length: pdfPageCount }, (_, i) => i + 1)
       const pageTexts: string[] = []
+      allPageLines = []
+
+      let seqPageNum = 0
       for (const pageNum of pagesToExtract) {
+        seqPageNum++
         const page = await doc.getPage(pageNum)
         const content = await page.getTextContent()
-        const text = (content.items as { str?: string }[])
-          .filter((item) => "str" in item)
-          .map((item) => item.str ?? "")
-          .join(" ")
-        pageTexts.push(text)
+        const items = content.items as any[]
+
+        const sorted = items
+          .map((it: any) => ({ item: it, y: Math.round(it.transform[5]) }))
+          .sort((a: any, b: any) => a.y - b.y)
+
+        const clusters: { y: number; items: any[] }[] = []
+        for (const { item, y } of sorted) {
+          if (clusters.length === 0 || Math.abs(clusters[clusters.length - 1].y - y) > 3) {
+            clusters.push({ y, items: [item] })
+          } else {
+            clusters[clusters.length - 1].items.push(item)
+          }
+        }
+
+        const lines: { y: number; chars: number; texts: { str: string; x: number; width: number; height: number }[] }[] = []
+
+        for (const cluster of clusters) {
+          cluster.items.sort((a: any, b: any) => a.transform[4] - b.transform[4])
+          const lineStr = cluster.items.map((it: any) => it.str).join(" ").replace(/\s+/g, " ").trim()
+
+          if (!lineStr) continue
+
+          const prevLine = lines[lines.length - 1]
+          if (prevLine) {
+            const prevText = prevLine.texts.map(t => t.str).join(" ").replace(/\s+/g, " ").trim()
+            if (prevText === lineStr) continue
+          }
+
+          lines.push({
+            y: cluster.y,
+            chars: lineStr.length,
+            texts: cluster.items.map((it: any) => ({
+              str: it.str,
+              x: Math.round(it.transform[4] * 100) / 100,
+              width: Math.round((it.width || 10) * 100) / 100,
+              height: Math.round((it.height || 12) * 100) / 100,
+            })),
+          })
+        }
+
+        allPageLines.push({ pageNum: seqPageNum, lines })
+        pageTexts.push(lines.map(l => l.texts.map(t => t.str).join(" ")).join("\n"))
       }
       originalText = pageTexts.join("\n\n").replace(/\0/g, "")
     } else if (ext === ".docx") {
@@ -128,6 +171,7 @@ export async function uploadDocument(formData: FormData) {
         charCount,
         ...(pagesInput ? { pageRange: pagesInput } : {}),
         ...(pdfPageCount ? { pageCount: pdfPageCount } : {}),
+        ...(ext === ".pdf" ? { pageLines: JSON.stringify(allPageLines) } : {}),
       },
     })
   } catch {
@@ -157,10 +201,44 @@ export async function uploadDocument(formData: FormData) {
       targetLanguage,
     })
 
+    const translatedText = result.translatedText
+    let pageLineTranslations: any = null
+
+    if (allPageLines && allPageLines.length > 0 && translatedText) {
+      type PageLineData = (typeof allPageLines)[number]
+      type LineData = PageLineData["lines"][number]
+
+      const lineWords = (l: LineData) => l.texts.map((t: any) => t.str).join(" ").split(/\s+/).filter(Boolean).length
+      const pageOrigWords: number[] = allPageLines.map((p: PageLineData) => p.lines.reduce((s: number, l: LineData) => s + lineWords(l), 0))
+      const totalOrigWords: number = pageOrigWords.reduce((s: number, c: number) => s + c, 0) || 1
+
+      pageLineTranslations = allPageLines.map((pageData: PageLineData, pageIdx: number) => {
+        const pageRatio = pageOrigWords[pageIdx] / totalOrigWords
+        const prevWords = pageOrigWords.slice(0, pageIdx).reduce((s: number, c: number) => s + c, 0)
+
+        const transWords = translatedText.split(/\s+/).filter(Boolean)
+        const pageStart = Math.round(prevWords / totalOrigWords * transWords.length)
+        const pageLen = Math.round(pageRatio * transWords.length)
+
+        let wordStart = 0
+        const translations: string[] = []
+        for (const line of pageData.lines) {
+          const wc = lineWords(line)
+          const ratio = wc / (pageData.lines.reduce((s: number, l: LineData) => s + lineWords(l), 0) || 1)
+          const nWords = Math.max(Math.round(ratio * pageLen), 1)
+          const slice = transWords.slice(pageStart + wordStart, Math.min(pageStart + wordStart + nWords, transWords.length))
+          translations.push(slice.join(" "))
+          wordStart += nWords
+        }
+        return { pageNum: pageData.pageNum, translations }
+      })
+    }
+
     await prisma.document.update({
       where: { id: document.id },
       data: {
-        translatedText: result.translatedText,
+        translatedText,
+        pageLineTranslations: pageLineTranslations ? JSON.stringify(pageLineTranslations) : undefined,
         status: "completed",
       },
     })

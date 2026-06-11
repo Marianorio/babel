@@ -21,6 +21,8 @@ export interface Document {
   charCount: number
   pageRange: string | null
   pageCount: number | null
+  pageLines: string | null
+  pageLineTranslations: string | null
   createdAt: Date
   updatedAt: Date
 }
