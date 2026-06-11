@@ -150,6 +150,8 @@ function TranslatedDocumentViewer({ document: doc }: { document: Document }) {
           totalPages={doc.pageCount || 0}
           pageLinesJson={doc.pageLines}
           pageLineTranslationsJson={doc.pageLineTranslations}
+          paragraphsJson={doc.paragraphs}
+          paragraphTranslationsJson={doc.paragraphTranslations}
           onLoadingChange={setOverlayLoading}
         />
         {overlayLoading && (

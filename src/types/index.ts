@@ -6,6 +6,28 @@ export interface User {
   updatedAt: Date
 }
 
+export interface TextItem {
+  str: string
+  x: number
+  width: number
+  height: number
+}
+
+export interface ParagraphLine {
+  y: number
+  texts: TextItem[]
+}
+
+export interface Paragraph {
+  id: string
+  pageNum: number
+  y: number
+  x: number
+  height: number
+  text: string
+  lines: ParagraphLine[]
+}
+
 export interface Document {
   id: string
   userId: string
@@ -23,6 +45,8 @@ export interface Document {
   pageCount: number | null
   pageLines: string | null
   pageLineTranslations: string | null
+  paragraphs: string | null
+  paragraphTranslations: string | null
   createdAt: Date
   updatedAt: Date
 }
