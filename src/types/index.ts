@@ -19,6 +19,8 @@ export interface Document {
   fileSize: number
   wordCount: number
   charCount: number
+  pageRange: string | null
+  pageCount: number | null
   createdAt: Date
   updatedAt: Date
 }

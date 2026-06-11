@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -71,10 +72,7 @@ export function NewTranslationForm() {
 
       async function getPageCount() {
         try {
-          const pdfjs = await import("pdfjs-dist")
-          pdfjs.GlobalWorkerOptions.workerSrc =
-            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/" + pdfjs.version + "/pdf.worker.min.mjs"
-          const doc = await pdfjs.getDocument({ url }).promise
+          const doc = await getDocument({ url }).promise
           setPdfPages(doc.numPages)
         } catch {
           setPdfPages(0)
@@ -337,15 +335,20 @@ export function NewTranslationForm() {
               />
             )}
 
-            {isPdf && pdfPages > 0 && (
-              <div className="flex items-center gap-3">
-                <Label className="shrink-0 text-sm font-medium">Páginas:</Label>
-                <Input
-                  placeholder="Ej: 1-3, 5, 7-9 (vacío = todas)"
-                  value={pageRange}
-                  onChange={(e) => setPageRange(e.target.value)}
-                  className="max-w-xs"
-                />
+            {isPdf && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-3">
+                  <Label className="shrink-0 text-sm font-medium">Páginas:</Label>
+                  <Input
+                    placeholder="Ej: 1-3, 5, 7-9 (vacío = todas)"
+                    value={pageRange}
+                    onChange={(e) => setPageRange(e.target.value)}
+                    className="max-w-xs"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Selecciona páginas o rangos específicos. Vacío = todas las páginas.
+                </p>
               </div>
             )}
           </CardContent>

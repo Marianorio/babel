@@ -67,14 +67,16 @@ export async function uploadDocument(formData: FormData) {
   }
 
   let originalText = ""
+  let pdfPageCount: number | null = null
   try {
     if (IMAGE_EXTENSIONS.includes(ext)) {
       originalText = await extractTextFromImage(buffer)
     } else if (ext === ".pdf") {
       const loadingTask = getDocument({ data: new Uint8Array(buffer) })
       const doc = await loadingTask.promise
-      const selectedPages = pagesInput ? parsePageRange(pagesInput, doc.numPages) : []
-      const pagesToExtract = selectedPages.length > 0 ? selectedPages : Array.from({ length: doc.numPages }, (_, i) => i + 1)
+      pdfPageCount = doc.numPages
+      const selectedPages = pagesInput ? parsePageRange(pagesInput, pdfPageCount) : []
+      const pagesToExtract = selectedPages.length > 0 ? selectedPages : Array.from({ length: pdfPageCount }, (_, i) => i + 1)
       const pageTexts: string[] = []
       for (const pageNum of pagesToExtract) {
         const page = await doc.getPage(pageNum)
@@ -124,6 +126,8 @@ export async function uploadDocument(formData: FormData) {
         fileSize: file.size,
         wordCount,
         charCount,
+        ...(pagesInput ? { pageRange: pagesInput } : {}),
+        ...(pdfPageCount ? { pageCount: pdfPageCount } : {}),
       },
     })
   } catch {

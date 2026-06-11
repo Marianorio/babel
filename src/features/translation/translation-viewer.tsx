@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useState, useEffect } from "react"
 import {
   ArrowLeft,
   Download,
@@ -13,7 +14,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import { formatDate, formatFileSize } from "@/lib/utils"
 import type { Document } from "@/types"
 
@@ -42,6 +42,72 @@ const statusConfig = {
     color: "text-red-600 dark:text-red-400",
     bg: "bg-red-50 dark:bg-red-900/20",
   },
+}
+
+function getFileExt(name: string): string {
+  return name.substring(name.lastIndexOf(".")).toLowerCase()
+}
+
+function OriginalDocumentViewer({ document: doc }: { document: Document }) {
+  const ext = getFileExt(doc.originalName)
+  const [docxHtml, setDocxHtml] = useState<string | null>(null)
+  const [loadingDocx, setLoadingDocx] = useState(true)
+
+  useEffect(() => {
+    if (ext !== ".docx") return
+
+    async function loadDocx() {
+      try {
+        const resp = await fetch(`/api/files/${doc.id}`)
+        const blob = await resp.blob()
+        const buffer = await blob.arrayBuffer()
+        const mammoth = await import("mammoth")
+        const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
+        setDocxHtml(result.value)
+      } catch (err) {
+        console.error("Error loading DOCX preview:", err)
+      }
+      setLoadingDocx(false)
+    }
+    loadDocx()
+  }, [doc.id, ext])
+
+  if (ext === ".pdf") {
+    const pdfSrc = doc.pageRange ? `/api/files/${doc.id}/pdf-pages` : `/api/files/${doc.id}`
+    return (
+      <embed
+        src={pdfSrc}
+        type="application/pdf"
+        className="w-full rounded-lg border border-border"
+        style={{ height: "600px" }}
+      />
+    )
+  }
+
+  if (ext === ".docx") {
+    if (loadingDocx) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Clock className="h-5 w-5 animate-pulse text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">Cargando documento...</span>
+        </div>
+      )
+    }
+    if (docxHtml) {
+      return (
+        <div
+          className="prose prose-sm max-w-none text-sm leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: docxHtml }}
+        />
+      )
+    }
+  }
+
+  return (
+    <pre className="whitespace-pre-wrap text-sm leading-relaxed">
+      {doc.originalText}
+    </pre>
+  )
 }
 
 export function TranslationViewer({ document }: { document: Document }) {
@@ -86,6 +152,7 @@ export function TranslationViewer({ document }: { document: Document }) {
               {formatFileSize(document.fileSize)}
               {document.wordCount > 0 && ` · ${document.wordCount} palabras`}
               {document.charCount > 0 && ` · ${document.charCount} caracteres`}
+              {document.pageRange && ` · Páginas: ${document.pageRange}`}
               {" · "}
               {formatDate(document.createdAt)}
             </p>
@@ -131,9 +198,7 @@ export function TranslationViewer({ document }: { document: Document }) {
             </Badge>
           </div>
           <div className="p-4">
-            <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-              {document.originalText}
-            </pre>
+            <OriginalDocumentViewer document={document} />
           </div>
         </div>
 

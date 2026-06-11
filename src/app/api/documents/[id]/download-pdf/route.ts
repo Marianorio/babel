@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
 import { PDFDocument, rgb, StandardFonts, type PDFPage } from "pdf-lib"
 import { logActivity } from "@/services/activity-service"
+import { readFile } from "fs/promises"
+import { join } from "path"
+import { parsePageRange } from "@/lib/page-range"
 
 export async function GET(
   _request: Request,
@@ -51,16 +54,6 @@ export async function GET(
     const pageHeight = 841.89
     const margin = 56.69
     const contentWidth = pageWidth - 2 * margin
-
-    function sanitizeForPdf(text: string): string {
-      return text
-        .replace(/[\u201C\u201D]/g, '"')
-        .replace(/[\u2018\u2019]/g, "'")
-        .replace(/[\u2013\u2014]/g, "-")
-        .replace(/\u2022/g, "-")
-        .replace(/\u2026/g, "...")
-        .replace(/[^\x20-\x7E\xA0-\xFF\u00F1\u00D1\u00E1\u00C1\u00E9\u00C9\u00ED\u00CD\u00F3\u00D3\u00FA\u00DA\u00FC\u00DC\u00BF\u00A1]/g, "")
-    }
 
     let pageNumber = 0
 
@@ -139,9 +132,6 @@ export async function GET(
       return lines
     }
 
-    const safeOriginalText = sanitizeForPdf(document.originalText)
-    const safeTranslatedText = sanitizeForPdf(document.translatedText)
-
     // Cover page
     const coverPage = pdfDoc.addPage([pageWidth, pageHeight])
     coverPage.drawRectangle({
@@ -180,12 +170,14 @@ export async function GET(
       color: darkGray,
     })
 
+    const pageRangeText = document.pageRange ? `Páginas: ${document.pageRange}` : "Todas las páginas"
     const coverDetails = [
       `Nombre: ${document.originalName}`,
       `Idioma original: ${document.sourceLanguage.toUpperCase()}`,
       `Idioma destino: ${document.targetLanguage.toUpperCase()}`,
       `Fecha: ${document.createdAt.toLocaleDateString("es-ES")}`,
       `Palabras: ${document.wordCount || "N/A"}`,
+      pageRangeText,
     ]
     coverDetails.forEach((detail, i) => {
       coverPage.drawText(detail, {
@@ -197,32 +189,32 @@ export async function GET(
       })
     })
 
-    // Original text pages
-    const origLines = wrapText(safeOriginalText, helvetica, 10, contentWidth)
-    const linesPerPage = Math.floor((pageHeight - 2 * margin - 80) / 16)
-    for (let i = 0; i < origLines.length; i += linesPerPage) {
-      const page = pdfDoc.addPage([pageWidth, pageHeight])
-      addHeaderFooter(page, "Texto original")
-      const chunk = origLines.slice(i, i + linesPerPage)
-      let y = pageHeight - margin - 50
-      if (i === 0) {
-        page.drawText("Texto original", {
-          x: margin,
-          y: y + 10,
-          size: 14,
-          font: helveticaBold,
-          color: blue,
-        })
-        y -= 30
-      }
-      for (const line of chunk) {
-        page.drawText(line, { x: margin, y, size: 10, font: helvetica, color: darkGray })
-        y -= 16
+    // Original PDF pages (if source is a PDF)
+    const ext = document.storedName.substring(document.storedName.lastIndexOf(".")).toLowerCase()
+    if (ext === ".pdf") {
+      try {
+        const filePath = join(process.cwd(), "uploads", document.storedName)
+        const origPdfBytes = await readFile(filePath)
+        const sourceDoc = await PDFDocument.load(origPdfBytes)
+        const totalSourcePages = sourceDoc.getPageCount()
+
+        let pageIndices: number[]
+        if (document.pageRange && document.pageCount) {
+          pageIndices = parsePageRange(document.pageRange, document.pageCount).map((p) => p - 1)
+        } else {
+          pageIndices = Array.from({ length: totalSourcePages }, (_, i) => i)
+        }
+
+        const copiedPages = await pdfDoc.copyPages(sourceDoc, pageIndices)
+        copiedPages.forEach((page) => pdfDoc.addPage(page))
+      } catch (err) {
+        console.error("Error copying original PDF pages:", err)
       }
     }
 
-    // Translated text pages
-    const transLines = wrapText(safeTranslatedText, helvetica, 10, contentWidth)
+    // Translation text pages
+    const transLines = wrapText(document.translatedText, helvetica, 10, contentWidth)
+    const linesPerPage = Math.floor((pageHeight - 2 * margin - 80) / 16)
     for (let i = 0; i < transLines.length; i += linesPerPage) {
       const page = pdfDoc.addPage([pageWidth, pageHeight])
       addHeaderFooter(page, "Traducción")
@@ -245,9 +237,9 @@ export async function GET(
     }
 
     const pdfBytes = await pdfDoc.save()
-    const ext = document.originalName.split(".").pop()
+    const fileExt = document.originalName.split(".").pop()
     const downloadName = document.originalName.replace(
-      `.${ext}`,
+      `.${fileExt}`,
       `_${document.targetLanguage.toUpperCase()}.pdf`
     )
 
