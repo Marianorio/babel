@@ -145,6 +145,7 @@ export async function uploadDocument(formData: FormData) {
           const prevFontH = prevLine.texts[0]?.height || 12
           const isNewPara = (line.y - prevLine.y) > prevFontH * 1.8
           if (isNewPara) {
+            paraLines.reverse()
             const paraText = NORMALIZE_WS(paraLines.map(l => l.texts.map(t => t.str).join(" ")).join(" "))
             if (paraText) {
               paragraphCounter++
@@ -157,7 +158,7 @@ export async function uploadDocument(formData: FormData) {
                 pageNum: seqPageNum,
                 y: firstLine.y,
                 x: Math.min(...firstLine.texts.map(t => t.x)),
-                height: (lastLine.y - firstLine.y) + lastFontH,
+                height: Math.abs(lastLine.y - firstLine.y) + lastFontH,
                 text: paraText,
                 lines: [...paraLines],
               })
@@ -168,6 +169,7 @@ export async function uploadDocument(formData: FormData) {
         }
 
         if (paraLines.length > 0) {
+          paraLines.reverse()
           const paraText = NORMALIZE_WS(paraLines.map(l => l.texts.map(t => t.str).join(" ")).join(" "))
           if (paraText) {
             paragraphCounter++
@@ -180,7 +182,7 @@ export async function uploadDocument(formData: FormData) {
               pageNum: seqPageNum,
               y: firstLine.y,
               x: Math.min(...firstLine.texts.map(t => t.x)),
-              height: (lastLine.y - firstLine.y) + lastFontH,
+              height: Math.abs(lastLine.y - firstLine.y) + lastFontH,
               text: paraText,
               lines: [...paraLines],
             })
@@ -189,6 +191,7 @@ export async function uploadDocument(formData: FormData) {
 
         pageTexts.push(lines.map(l => l.texts.map(t => t.str).join(" ")).join("\n"))
       }
+      allParagraphs.sort((a, b) => a.pageNum - b.pageNum || b.y - a.y)
       originalText = pageTexts.join("\n\n").replace(/\0/g, "")
     } else if (ext === ".docx") {
       const mammoth = await import("mammoth")
@@ -234,7 +237,8 @@ export async function uploadDocument(formData: FormData) {
         ...(ext === ".pdf" && allParagraphs.length > 0 ? { paragraphs: JSON.stringify(allParagraphs) } : {}),
       },
     })
-  } catch {
+    } catch (e) {
+    console.error("Error guardando documento:", e instanceof Error ? e.message : e)
     return { error: "Error al guardar el documento. El archivo podría tener un formato no compatible." }
   }
 
@@ -280,20 +284,59 @@ export async function uploadDocument(formData: FormData) {
         paragraphTranslationsMap[match[1]] = NORMALIZE_WS(match[2])
       }
 
-      if (allPageLines && allPageLines.length > 0) {
-        const pMap = paragraphTranslationsMap || {}
-        pageLineTranslations = allPageLines.map((pg) => {
-          const pageParas = allParagraphs.filter(p => p.pageNum === pg.pageNum)
-          const translations: string[] = []
-          for (const line of pg.lines) {
-            const lineText = NORMALIZE_WS(line.texts.map(t => t.str).join(" "))
-            const owner = pageParas.find(p =>
-              p.lines.some(l => NORMALIZE_WS(l.texts.map(t => t.str).join(" ")) === lineText)
-            )
-            translations.push(owner ? (pMap[owner.id] || "") : "")
-          }
-          return { pageNum: pg.pageNum, translations }
+      const matchedCount = Object.keys(paragraphTranslationsMap).length
+      const markersFailed = matchedCount < allParagraphs.length * 0.5
+
+      if (markersFailed) {
+        const result2 = await service.translate({
+          text: originalText,
+          sourceLanguage,
+          targetLanguage,
         })
+        translatedText = result2.translatedText
+        paragraphTranslationsMap = null
+      }
+
+      if (allPageLines && allPageLines.length > 0) {
+        if (paragraphTranslationsMap) {
+          const pMap = paragraphTranslationsMap
+          pageLineTranslations = allPageLines.map((pg) => {
+            const pageParas = allParagraphs.filter(p => p.pageNum === pg.pageNum)
+            const translations: string[] = []
+            for (const line of pg.lines) {
+              const lineText = NORMALIZE_WS(line.texts.map(t => t.str).join(" "))
+              const owner = pageParas.find(p =>
+                p.lines.some(l => NORMALIZE_WS(l.texts.map(t => t.str).join(" ")) === lineText)
+              )
+              translations.push(owner ? (pMap[owner.id] || "") : "")
+            }
+            return { pageNum: pg.pageNum, translations }
+          })
+        } else if (translatedText) {
+          type PageLineData = (typeof allPageLines)[number]
+          type LineData = PageLineData["lines"][number]
+          const lineWords = (l: LineData) => l.texts.map((t: any) => t.str).join(" ").split(/\s+/).filter(Boolean).length
+          const pageOrigWords: number[] = allPageLines.map((p: PageLineData) => p.lines.reduce((s: number, l: LineData) => s + lineWords(l), 0))
+          const totalOrigWords: number = pageOrigWords.reduce((s: number, c: number) => s + c, 0) || 1
+          pageLineTranslations = allPageLines.map((pageData: PageLineData, pageIdx: number) => {
+            const pageRatio = pageOrigWords[pageIdx] / totalOrigWords
+            const prevWords = pageOrigWords.slice(0, pageIdx).reduce((s: number, c: number) => s + c, 0)
+            const transWords = translatedText.split(/\s+/).filter(Boolean)
+            const pageStart = Math.round(prevWords / totalOrigWords * transWords.length)
+            const pageLen = Math.round(pageRatio * transWords.length)
+            let wordStart = 0
+            const translations: string[] = []
+            for (const line of pageData.lines) {
+              const wc = lineWords(line)
+              const ratio = wc / (pageData.lines.reduce((s: number, l: LineData) => s + lineWords(l), 0) || 1)
+              const nWords = Math.max(Math.round(ratio * pageLen), 1)
+              const slice = transWords.slice(pageStart + wordStart, Math.min(pageStart + wordStart + nWords, transWords.length))
+              translations.push(slice.join(" "))
+              wordStart += nWords
+            }
+            return { pageNum: pageData.pageNum, translations }
+          })
+        }
       }
     } else {
       const result = await service.translate({

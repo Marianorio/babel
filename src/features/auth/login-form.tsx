@@ -2,12 +2,13 @@
 
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, Languages } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { loginUser } from "@/actions/auth"
 
@@ -37,9 +38,7 @@ export function LoginForm() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-            <Languages className="h-6 w-6 text-primary-foreground" />
-          </div>
+          <Image src="/BabelIcon2.webp" alt="Babel" width={30} height={48} className="mx-auto mb-4 rounded-xl" />
           <h1 className="text-2xl font-bold tracking-tight">Iniciar sesión</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Ingresa a tu cuenta de Babel Translations

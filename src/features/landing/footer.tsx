@@ -1,5 +1,6 @@
 import Link from "next/link"
-import { Languages, Mail, Globe, MessageCircle, Link2 } from "lucide-react"
+import Image from "next/image"
+import { Mail, Globe, MessageCircle, Link2 } from "lucide-react"
 
 export function Footer() {
   return (
@@ -7,11 +8,9 @@ export function Footer() {
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-4">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <Languages className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-bold">Babel</span>
+            <Link href="/" className="flex items-center gap-3">
+              <Image src="/BabelIcon2.webp" alt="Babel" width={20} height={32} className="rounded-lg" />
+              <Image src="/babeltextlogo2.webp" alt="Babel" width={82} height={32} />
             </Link>
             <p className="text-sm leading-relaxed text-muted-foreground">
               Traducciones legales precisas impulsadas por inteligencia

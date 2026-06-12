@@ -40,14 +40,12 @@ export async function GET(
   }).catch(() => {})
 
   try {
-    const pdfDoc = await PDFDocument.create()
-    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
-    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+    const helvetica = StandardFonts.Helvetica
+    const helveticaBold = StandardFonts.HelveticaBold
 
     const blue = rgb(0.11, 0.30, 0.85)
     const darkGray = rgb(0.07, 0.09, 0.15)
     const mediumGray = rgb(0.42, 0.45, 0.50)
-    const lightGray = rgb(0.95, 0.96, 0.97)
     const white = rgb(1, 1, 1)
 
     const pageWidth = 595.28
@@ -55,120 +53,64 @@ export async function GET(
     const margin = 56.69
     const contentWidth = pageWidth - 2 * margin
 
-    let pageNumber = 0
+    // Extract clean translated text and paragraph data
+    let paragraphs: { id: string; pageNum: number; y: number; x: number; height: number; text: string; lines: { y: number; texts: { str: string; x: number; width: number; height: number }[] }[] }[] | null = null
+    let paraTranslations: Record<string, string> | null = null
 
-    function addHeaderFooter(page: PDFPage, title: string) {
-      pageNumber++
-      const { height } = page.getSize()
-      page.drawRectangle({
-        x: 0,
-        y: height - 40,
-        width: pageWidth,
-        height: 40,
-        color: blue,
-      })
-      page.drawText("Babel Translations", {
-        x: margin,
-        y: height - 28,
-        size: 10,
-        font: helveticaBold,
-        color: white,
-      })
-      page.drawText(title, {
-        x: pageWidth - margin - 150,
-        y: height - 28,
-        size: 8,
-        font: helvetica,
-        color: white,
-      })
-      page.drawRectangle({
-        x: 0,
-        y: 0,
-        width: pageWidth,
-        height: 30,
-        color: lightGray,
-      })
-      page.drawText(
-        `Generado por Babel Translations · ${new Date().toLocaleDateString("es-ES")}`,
-        {
-          x: margin,
-          y: 10,
-          size: 8,
-          font: helvetica,
-          color: mediumGray,
-        }
-      )
-      page.drawText(`Página ${pageNumber}`, {
-        x: pageWidth - margin - 40,
-        y: 10,
-        size: 8,
-        font: helvetica,
-        color: mediumGray,
-      })
+    if (document.paragraphs) {
+      try { paragraphs = JSON.parse(document.paragraphs) } catch { paragraphs = null }
+    }
+    if (document.paragraphTranslations) {
+      try { paraTranslations = JSON.parse(document.paragraphTranslations) } catch { paraTranslations = null }
     }
 
-    function wrapText(text: string, font: typeof helvetica, size: number, maxWidth: number): string[] {
-      const lines: string[] = []
-      const paragraphs = text.split("\n")
-      for (const paragraph of paragraphs) {
-        if (!paragraph.trim()) {
-          lines.push("")
-          continue
-        }
-        const words = paragraph.split(" ")
-        let currentLine = ""
-        for (const word of words) {
-          const testLine = currentLine ? `${currentLine} ${word}` : word
-          const width = font.widthOfTextAtSize(testLine, size)
-          if (width > maxWidth && currentLine) {
-            lines.push(currentLine)
-            currentLine = word
-          } else {
-            currentLine = testLine
-          }
-        }
-        if (currentLine) lines.push(currentLine)
+    let cleanTranslatedText = document.translatedText
+    if (paragraphs && paraTranslations) {
+      const texts = paragraphs.map((p) => paraTranslations![p.id]).filter(Boolean)
+      if (texts.length > 0) {
+        cleanTranslatedText = texts.join("\n\n")
       }
-      return lines
+    } else {
+      cleanTranslatedText = document.translatedText
+        .replace(/<\s*paragraph\s+[^>]*>\s*/gi, "")
+        .replace(/<\s*\/\s*paragraph\s*>/gi, "")
+        .trim()
     }
 
-    // Cover page
-    const coverPage = pdfDoc.addPage([pageWidth, pageHeight])
-    coverPage.drawRectangle({
-      x: 0,
-      y: 0,
-      width: pageWidth,
-      height: pageHeight,
-      color: white,
-    })
-    coverPage.drawRectangle({
-      x: 0,
-      y: pageHeight * 0.7,
-      width: pageWidth,
-      height: pageHeight * 0.3,
-      color: blue,
-    })
-    coverPage.drawText("Babel", {
-      x: margin,
-      y: pageHeight * 0.72 + 60,
-      size: 48,
-      font: helveticaBold,
-      color: white,
-    })
-    coverPage.drawText("Traducciones", {
-      x: margin,
-      y: pageHeight * 0.72 + 20,
-      size: 20,
-      font: helvetica,
-      color: white,
-    })
-    coverPage.drawText("Documento traducido", {
-      x: margin,
-      y: pageHeight * 0.6,
-      size: 16,
-      font: helveticaBold,
-      color: darkGray,
-    })
+    const ext = document.storedName.substring(document.storedName.lastIndexOf(".")).toLowerCase()
+
+    // Load source PDF if applicable
+    let sourceDoc: PDFDocument | null = null
+    let originalPageIndices: number[] = []
+
+    if (ext === ".pdf") {
+      const filePath = join(process.cwd(), "uploads", document.storedName)
+      const origPdfBytes = await readFile(filePath)
+      sourceDoc = await PDFDocument.load(origPdfBytes)
+      const totalSourcePages = sourceDoc.getPageCount()
+
+      if (document.pageRange && document.pageCount) {
+        originalPageIndices = parsePageRange(document.pageRange, document.pageCount).map((p) => p - 1)
+      } else {
+        originalPageIndices = Array.from({ length: totalSourcePages }, (_, i) => i)
+      }
+    }
+
+    // Create output PDF
+    const pdfDoc = await PDFDocument.create()
+    const font = await pdfDoc.embedFont(helvetica)
+    const fontBold = await pdfDoc.embedFont(helveticaBold)
+
+    // ── Cover page ──
+    const tempDoc = await PDFDocument.create()
+    const tempFont = await tempDoc.embedFont(helvetica)
+    const tempFontBold = await tempDoc.embedFont(helveticaBold)
+    const coverPage = tempDoc.addPage([pageWidth, pageHeight])
+    coverPage.drawRectangle({ x: 0, y: 0, width: pageWidth, height: pageHeight, color: white })
+    coverPage.drawRectangle({ x: 0, y: pageHeight * 0.7, width: pageWidth, height: pageHeight * 0.3, color: blue })
+    coverPage.drawText("Babel", { x: margin, y: pageHeight * 0.72 + 60, size: 48, font: tempFontBold, color: white })
+    coverPage.drawText("Traducciones", { x: margin, y: pageHeight * 0.72 + 20, size: 20, font: tempFont, color: white })
+    coverPage.drawText("Documento traducido", { x: margin, y: pageHeight * 0.6, size: 16, font: tempFontBold, color: darkGray })
 
     const pageRangeText = document.pageRange ? `Páginas: ${document.pageRange}` : "Todas las páginas"
     const coverDetails = [
@@ -180,59 +122,137 @@ export async function GET(
       pageRangeText,
     ]
     coverDetails.forEach((detail, i) => {
-      coverPage.drawText(detail, {
-        x: margin,
-        y: pageHeight * 0.55 - i * 20,
-        size: 11,
-        font: helvetica,
-        color: mediumGray,
-      })
+      coverPage.drawText(detail, { x: margin, y: pageHeight * 0.55 - i * 20, size: 11, font: tempFont, color: mediumGray })
     })
 
-    // Original PDF pages (if source is a PDF)
-    const ext = document.storedName.substring(document.storedName.lastIndexOf(".")).toLowerCase()
-    if (ext === ".pdf") {
+    const [copiedCover] = await pdfDoc.copyPages(tempDoc, [0])
+    pdfDoc.addPage(copiedCover)
+
+    // ── Original pages (preserve images, layout) ──
+    if (sourceDoc && originalPageIndices.length > 0) {
+      const origPages = await pdfDoc.copyPages(sourceDoc, originalPageIndices)
+      for (const page of origPages) {
+        pdfDoc.addPage(page)
+      }
+    } else if ([".png", ".jpg", ".jpeg"].includes(ext)) {
       try {
         const filePath = join(process.cwd(), "uploads", document.storedName)
-        const origPdfBytes = await readFile(filePath)
-        const sourceDoc = await PDFDocument.load(origPdfBytes)
-        const totalSourcePages = sourceDoc.getPageCount()
-
-        let pageIndices: number[]
-        if (document.pageRange && document.pageCount) {
-          pageIndices = parsePageRange(document.pageRange, document.pageCount).map((p) => p - 1)
-        } else {
-          pageIndices = Array.from({ length: totalSourcePages }, (_, i) => i)
-        }
-
-        const copiedPages = await pdfDoc.copyPages(sourceDoc, pageIndices)
-        copiedPages.forEach((page) => pdfDoc.addPage(page))
-      } catch (err) {
-        console.error("Error copying original PDF pages:", err)
-      }
+        const imgBytes = await readFile(filePath)
+        let img
+        if (ext === ".png") { img = await pdfDoc.embedPng(imgBytes) }
+        else { img = await pdfDoc.embedJpg(imgBytes) }
+        const imgPage = pdfDoc.addPage([pageWidth, pageHeight])
+        const dims = img.scaleToFit(pageWidth - 2 * margin, pageHeight - 2 * margin)
+        imgPage.drawImage(img, {
+          x: (pageWidth - dims.width) / 2,
+          y: (pageHeight - dims.height) / 2,
+          width: dims.width,
+          height: dims.height,
+        })
+      } catch (err) { console.error("Error embedding image:", err) }
     }
 
-    // Translation text pages
-    const transLines = wrapText(document.translatedText, helvetica, 10, contentWidth)
-    const linesPerPage = Math.floor((pageHeight - 2 * margin - 80) / 16)
-    for (let i = 0; i < transLines.length; i += linesPerPage) {
-      const page = pdfDoc.addPage([pageWidth, pageHeight])
-      addHeaderFooter(page, "Traducción")
-      const chunk = transLines.slice(i, i + linesPerPage)
-      let y = pageHeight - margin - 50
-      if (i === 0) {
-        page.drawText("Traducción", {
-          x: margin,
-          y: y + 10,
-          size: 14,
-          font: helveticaBold,
-          color: blue,
-        })
-        y -= 30
+    // ── Translation pages: overlay on copied original pages ──
+    if (sourceDoc && paragraphs && paraTranslations && originalPageIndices.length > 0) {
+      const transPages = await pdfDoc.copyPages(sourceDoc, originalPageIndices)
+      for (let pgIdx = 0; pgIdx < transPages.length; pgIdx++) {
+        const page = transPages[pgIdx]
+        const pageNum = pgIdx + 1
+        const pageParas = paragraphs.filter((p) => p.pageNum === pageNum)
+
+        for (const para of pageParas) {
+          const translation = paraTranslations[para.id]
+          if (!translation) continue
+
+          const firstLine = para.lines?.[0]
+          const firstText = firstLine?.texts?.[0]
+          const fontSize = Math.max(firstText?.height || 12, 10)
+          const leftMargin = Math.max(firstText?.x || margin, margin)
+
+          // Cover original text with white rectangles (oversized for full coverage)
+          for (const line of para.lines || []) {
+            for (const t of line.texts || []) {
+              const fh = Math.max(t.height || 12, 10)
+              page.drawRectangle({
+                x: t.x - 2,
+                y: line.y - 4,
+                width: Math.max(t.width || 10, 10) + 6,
+                height: fh + 8,
+                color: white,
+              })
+            }
+          }
+
+          // Draw translated text with word-wrap at paragraph position
+          const paraWidth = pageWidth - leftMargin - margin
+          const wrapWidth = pageWidth - 2 * margin
+          const words = translation.split(/\s+/)
+          let currentLine = ""
+          let currentY = para.y
+          let isFirstLine = true
+
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word
+            const textWidth = font.widthOfTextAtSize(testLine, fontSize)
+            const maxWidth = isFirstLine ? paraWidth : wrapWidth
+            if (textWidth > maxWidth && currentLine) {
+              page.drawText(currentLine, {
+                x: isFirstLine ? leftMargin : margin,
+                y: currentY,
+                size: fontSize,
+                font,
+                color: darkGray,
+              })
+              currentLine = word
+              currentY -= fontSize * 1.4
+              isFirstLine = false
+            } else {
+              currentLine = testLine
+            }
+          }
+          if (currentLine) {
+            page.drawText(currentLine, {
+              x: isFirstLine ? leftMargin : margin,
+              y: currentY,
+              size: fontSize,
+              font,
+              color: darkGray,
+            })
+          }
+        }
+
+        pdfDoc.addPage(page)
       }
-      for (const line of chunk) {
-        page.drawText(line, { x: margin, y, size: 10, font: helvetica, color: darkGray })
-        y -= 16
+    } else {
+      // Fallback: plain text translation pages
+      function wrapText(text: string, f: typeof font, size: number, maxWidth: number): string[] {
+        const lines: string[] = []
+        const paras = text.split("\n")
+        for (const p of paras) {
+          if (!p.trim()) { lines.push(""); continue }
+          const words = p.split(" ")
+          let cur = ""
+          for (const word of words) {
+            const test = cur ? `${cur} ${word}` : word
+            if (f.widthOfTextAtSize(test, size) > maxWidth && cur) {
+              lines.push(cur); cur = word
+            } else { cur = test }
+          }
+          if (cur) lines.push(cur)
+        }
+        return lines
+      }
+
+      const transLines = wrapText(cleanTranslatedText, font, 11, contentWidth)
+      const linesPerPage = Math.floor((pageHeight - 2 * margin - 80) / 17)
+      for (let i = 0; i < transLines.length; i += linesPerPage) {
+        const page = pdfDoc.addPage([pageWidth, pageHeight])
+        const chunk = transLines.slice(i, i + linesPerPage)
+        let y = pageHeight - margin - 40
+        for (const line of chunk) {
+          page.drawText(line, { x: margin, y, size: 11, font, color: darkGray })
+          y -= 17
+        }
       }
     }
 

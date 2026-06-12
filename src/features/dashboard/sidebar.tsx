@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -44,10 +45,10 @@ export function Sidebar() {
               collapsed && "justify-center"
             )}
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-              <Languages className="h-4 w-4 text-primary-foreground" />
-            </div>
-            {!collapsed && <span className="text-lg">Babel</span>}
+            <Image src="/BabelIcon2.webp" alt="Babel" width={20} height={32} className="shrink-0 rounded-lg" />
+            {!collapsed && (
+              <Image src="/babeltextlogo2.webp" alt="Babel" width={82} height={32} />
+            )}
           </Link>
           <Button
             variant="ghost"

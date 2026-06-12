@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   ArrowLeft,
   Download,
@@ -114,6 +114,18 @@ function OriginalDocumentViewer({ document: doc }: { document: Document }) {
 function TranslatedDocumentViewer({ document: doc }: { document: Document }) {
   const ext = getFileExt(doc.originalName)
   const [overlayLoading, setOverlayLoading] = useState(true)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [pageHeight, setPageHeight] = useState<string>("auto")
+
+  useEffect(() => {
+    if (!overlayLoading && scrollRef.current && ext === ".pdf") {
+      const firstCanvas = scrollRef.current.querySelector("canvas")
+      if (firstCanvas) {
+        const h = firstCanvas.offsetHeight + 16
+        setPageHeight(`${h}px`)
+      }
+    }
+  }, [overlayLoading, ext])
 
   if (!doc.translatedText) {
     if (doc.status === "processing") {
@@ -143,7 +155,11 @@ function TranslatedDocumentViewer({ document: doc }: { document: Document }) {
   if (ext === ".pdf") {
     const pdfSrc = doc.pageRange ? `/api/files/${doc.id}/pdf-pages` : `/api/files/${doc.id}`
     return (
-      <div className="space-y-4">
+      <div
+        ref={scrollRef}
+        className="overflow-y-auto"
+        style={{ maxHeight: pageHeight }}
+      >
         <PdfOverlayViewer
           pdfSrc={pdfSrc}
           translatedText={doc.translatedText}

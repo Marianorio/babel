@@ -79,7 +79,8 @@ export function PdfOverlayViewer({
           const ctx = canvas.getContext("2d")!
           await page.render({ canvasContext: ctx, viewport } as any).promise
 
-          const pagePara = paragraphs?.filter(p => p.pageNum === pageNum) || []
+          const pagePara = (paragraphs?.filter(p => p.pageNum === pageNum) || [])
+            .sort((a: Para, b: Para) => b.y - a.y)
           const margin = viewport.width * 0.08
           const rightMargin = margin
 

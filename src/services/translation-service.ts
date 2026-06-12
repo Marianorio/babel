@@ -86,29 +86,9 @@ export class TranslationService {
     )
   }
 
-  private getProvidersInOrder(): TranslationProvider[] {
-    const configured: TranslationProvider[] = []
-    for (const p of ["gemini", "openrouter", "deepseek", "openai", "libretranslate", "argos"] as TranslationProvider[]) {
-      const keyMap: Record<string, string> = {
-        gemini: "GEMINI_API_KEY",
-        openrouter: "OPENROUTER_API_KEY",
-        deepseek: "DEEPSEEK_API_KEY",
-        openai: "OPENAI_API_KEY",
-        libretranslate: "LIBRETRANSLATE_API_KEY",
-        argos: "ARGOS_API_KEY",
-      }
-      if (process.env[keyMap[p]]) configured.push(p)
-    }
-    configured.push("mock")
-    return configured
-  }
-
-  private async tryAll(request: TranslationRequest): Promise<TranslationResult> {
-    const providers = this.getProvidersInOrder()
-    const preferredIdx = providers.indexOf(this.provider)
-    if (preferredIdx > 0) {
-      providers.splice(preferredIdx, 1)
-      providers.unshift(this.provider)
+  async translate(request: TranslationRequest): Promise<TranslationResult> {
+    if (this.provider === "mock") {
+      return this.translateWithMock(request)
     }
 
     const providerMap: Record<string, (r: TranslationRequest) => Promise<TranslationResult>> = {
@@ -121,22 +101,26 @@ export class TranslationService {
       mock: this.translateWithMock.bind(this),
     }
 
-    let lastError: Error | null = null
-    for (const p of providers) {
-      try {
-        return await providerMap[p](request)
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err))
-      }
+    const handler = providerMap[this.provider]
+    if (!handler) {
+      throw new TranslationError("Proveedor no válido.")
     }
-    throw lastError || new TranslationError()
-  }
 
-  async translate(request: TranslationRequest): Promise<TranslationResult> {
-    if (this.provider === "mock") {
-      return this.translateWithMock(request)
+    try {
+      return await handler(request)
+    } catch (err) {
+      if (err instanceof TranslationError) {
+        if (
+          err.message.includes("429") ||
+          err.message.includes("rate_limit") ||
+          err.message.includes("Too Many Requests")
+        ) {
+          throw new TranslationError("Límite de intentos alcanzado.")
+        }
+        throw err
+      }
+      throw new TranslationError("Ha ocurrido un error con este proveedor.")
     }
-    return this.tryAll(request)
   }
 
   private async translateWithMock(
@@ -202,6 +186,8 @@ export class TranslationService {
       throw new TranslationError("OpenRouter no configurado. Añade OPENROUTER_API_KEY en .env.")
     }
 
+    const prompt = this.buildPrompt(request)
+
     const response = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
       {
@@ -211,23 +197,35 @@ export class TranslationService {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "deepseek/deepseek-chat",
-          messages: [
-            {
-              role: "system",
-              content: `Eres un traductor legal profesional. Traduce el siguiente texto de ${LANGUAGE_MAP[request.sourceLanguage] || request.sourceLanguage} a ${LANGUAGE_MAP[request.targetLanguage] || request.targetLanguage}.`,
-            },
-            {
-              role: "user",
-              content: request.text,
-            },
-          ],
+          model: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.2-3b-instruct:free",
+          messages: [{ role: "user", content: prompt }],
         }),
       }
     )
 
     if (!response.ok) {
-      throw new TranslationError("Error en OpenRouter: " + response.status)
+      const errText = await response.text().catch(() => "")
+      const errLower = errText.toLowerCase()
+
+      if (
+        errLower.includes("insufficient_quota") ||
+        errLower.includes("billing") ||
+        errLower.includes("payment") ||
+        errLower.includes("credits") ||
+        errLower.includes("free tier")
+      ) {
+        throw new TranslationError("Opción de pago requerida. OpenRouter requiere créditos o el modelo gratuito no está disponible.")
+      }
+
+      if (response.status === 429) {
+        throw new TranslationError("Límite de intentos alcanzado en OpenRouter.")
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new TranslationError("Error de autenticación en OpenRouter. Verifica que la API key sea válida.")
+      }
+
+      throw new TranslationError("Error en OpenRouter (" + response.status + "): " + errText)
     }
 
     const data = await response.json()
@@ -276,9 +274,26 @@ export class TranslationService {
 
     if (!response.ok) {
       const errText = await response.text()
+      const errLower = errText.toLowerCase()
+
+      if (
+        errLower.includes("billing") ||
+        errLower.includes("payment") ||
+        errLower.includes("quota") ||
+        errLower.includes("financial") ||
+        errLower.includes("free tier")
+      ) {
+        throw new TranslationError("Opción de pago requerida. Gemini requiere un método de pago válido o has agotado la cuota gratuita.")
+      }
+
       if (response.status === 429) {
         throw new TranslationError("Límite de intentos alcanzado para Gemini. Espera un momento o cambia de proveedor.")
       }
+
+      if (response.status === 403) {
+        throw new TranslationError("Error de autenticación en Gemini. Verifica que la API key sea válida.")
+      }
+
       throw new TranslationError("Error en Gemini (" + response.status + "): " + errText)
     }
 
@@ -299,6 +314,8 @@ export class TranslationService {
       throw new TranslationError("OpenAI no configurado. Añade OPENAI_API_KEY en .env.")
     }
 
+    const prompt = this.buildPrompt(request)
+
     const response = await fetch(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -308,20 +325,34 @@ export class TranslationService {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "gpt-4",
+          model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
           messages: [
-            {
-              role: "system",
-              content: `Eres un traductor legal profesional. Traduce de ${LANGUAGE_MAP[request.sourceLanguage] || request.sourceLanguage} a ${LANGUAGE_MAP[request.targetLanguage] || request.targetLanguage}.`,
-            },
-            { role: "user", content: request.text },
+            { role: "user", content: prompt },
           ],
         }),
       }
     )
 
     if (!response.ok) {
-      throw new TranslationError("Error en OpenAI: " + response.status)
+      const errText = await response.text().catch(() => "")
+      const errLower = errText.toLowerCase()
+
+      if (
+        errLower.includes("insufficient_quota") ||
+        errLower.includes("billing") ||
+        errLower.includes("payment")
+      ) {
+        throw new TranslationError("Opción de pago requerida. OpenAI requiere un método de pago válido.")
+      }
+
+      if (response.status === 429) {
+        throw new TranslationError("Límite de intentos alcanzado en OpenAI.")
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new TranslationError("Error de autenticación en OpenAI. Verifica que la API key sea válida y tenga crédito disponible.")
+      }
+      throw new TranslationError("Error en OpenAI (" + response.status + "): " + errText)
     }
 
     const data = await response.json()
