@@ -120,19 +120,59 @@ export function PdfOverlayViewer({
               const fontSize = Math.max((firstText?.height || 12) * scale, 10)
               ctx.font = `${fontSize}px Helvetica, Arial, sans-serif`
 
-              const paraWidth = viewport.width - indentX - rightMargin
-              const wrapWidth = viewport.width - 2 * margin
+              // Build per-line rightLimit map from original text bounding boxes
+              const fullEdge = viewport.width - margin
+              const imgThreshold = 50 * scale
+              const segments: { yTop: number; yBottom: number; rightLimit: number }[] = []
+              for (const line of para.lines) {
+                if (line.texts.length === 0) continue
+                const rightX = Math.max(...line.texts.map(t => (t.x + (t.width || 10)) * scale))
+                const bottom = viewport.height - line.y * scale
+                const h = Math.max(...line.texts.map(t => (t.height || 12) * scale))
+                segments.push({ yTop: bottom - h, yBottom: bottom, rightLimit: rightX })
+              }
+
+              function widthAt(y: number, isFirst: boolean): number {
+                const defaultW = viewport.width - (isFirst ? indentX : margin) - rightMargin
+                if (segments.length === 0) return defaultW
+
+                for (const seg of segments) {
+                  if (y >= seg.yTop && y <= seg.yBottom) {
+                    if (seg.rightLimit < fullEdge - imgThreshold) {
+                      return isFirst ? seg.rightLimit - indentX : seg.rightLimit - margin
+                    }
+                    return defaultW
+                  }
+                }
+
+                const maxBottom = Math.max(...segments.map(s => s.yBottom))
+                if (y >= maxBottom) return defaultW
+
+                let nearest = segments[0]
+                let minDist = Infinity
+                for (const seg of segments) {
+                  const d = Math.min(Math.abs(y - seg.yTop), Math.abs(y - seg.yBottom))
+                  if (d < minDist) { minDist = d; nearest = seg }
+                }
+                if (nearest.rightLimit < fullEdge - imgThreshold) {
+                  return isFirst ? nearest.rightLimit - indentX : nearest.rightLimit - margin
+                }
+                return defaultW
+              }
+
+              // Pre-calculate word-wrap with per-line width detection
               const words = translation.split(/\s+/)
+              const textLines: { text: string; x: number; y: number }[] = []
               let currentLine = ""
               let currentY = effectiveY
               let isFirstLine = true
 
               for (const word of words) {
+                const maxWidth = widthAt(currentY, isFirstLine)
                 const testLine = currentLine ? currentLine + " " + word : word
                 const metrics = ctx.measureText(testLine)
-                const maxWidth = isFirstLine ? paraWidth : wrapWidth
                 if (metrics.width > maxWidth && currentLine) {
-                  ctx.fillText(currentLine, isFirstLine ? indentX : margin, currentY)
+                  textLines.push({ text: currentLine, x: isFirstLine ? indentX : margin, y: currentY })
                   currentLine = word
                   currentY += fontSize * 1.4
                   isFirstLine = false
@@ -140,9 +180,33 @@ export function PdfOverlayViewer({
                   currentLine = testLine
                 }
               }
-              if (currentLine) ctx.fillText(currentLine, isFirstLine ? indentX : margin, currentY)
+              if (currentLine) {
+                textLines.push({ text: currentLine, x: isFirstLine ? indentX : margin, y: currentY })
+              }
 
-              cursorY = currentY + fontSize * 0.4
+              if (textLines.length === 0) {
+                cursorY = effectiveY + fontSize * 0.4
+                continue
+              }
+
+              // Draw white rectangles covering the full vertical span of the translation
+              ctx.fillStyle = "#ffffff"
+              let lineY = effectiveY
+              for (let i = 0; i < textLines.length; i++) {
+                const maxWidth = widthAt(lineY, i === 0)
+                ctx.fillRect(textLines[i].x, lineY - fontSize, maxWidth, fontSize + 2)
+                lineY += fontSize * 1.4
+              }
+
+              // Draw translated text
+              ctx.fillStyle = "#1a1a1a"
+              lineY = effectiveY
+              for (const line of textLines) {
+                ctx.fillText(line.text, line.x, lineY)
+                lineY += fontSize * 1.4
+              }
+
+              cursorY = lineY - fontSize * 1.4 + fontSize * 0.4
             }
           } else {
             const pageData = pageLines?.find((pd: any) => pd.pageNum === pageNum)

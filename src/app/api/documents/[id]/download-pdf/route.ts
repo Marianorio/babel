@@ -158,7 +158,8 @@ export async function GET(
       for (let pgIdx = 0; pgIdx < transPages.length; pgIdx++) {
         const page = transPages[pgIdx]
         const pageNum = pgIdx + 1
-        const pageParas = paragraphs.filter((p) => p.pageNum === pageNum)
+        const pageParas = paragraphs.filter((p) => p.pageNum === pageNum).sort((a, b) => b.y - a.y)
+        let cursorY = pageHeight
 
         for (const para of pageParas) {
           const translation = paraTranslations[para.id]
@@ -183,26 +184,63 @@ export async function GET(
             }
           }
 
-          // Draw translated text with word-wrap at paragraph position
-          const paraWidth = pageWidth - leftMargin - margin
-          const wrapWidth = pageWidth - 2 * margin
+          // Build per-line rightLimit map from original text bounding boxes (PDF coords)
+          const fullEdge = pageWidth - margin
+          const imgThreshold = 50
+          const segments: { bottom: number; top: number; rightLimit: number }[] = []
+          for (const line of para.lines || []) {
+            if (line.texts.length === 0) continue
+            const rightX = Math.max(...line.texts.map(t => (t.x || 0) + (t.width || 10)))
+            const h = Math.max(...line.texts.map(t => (t.height || 12)))
+            segments.push({ bottom: line.y, top: line.y + h, rightLimit: rightX })
+          }
+
+          function widthAt(y: number, isFirst: boolean): number {
+            const defaultW = pageWidth - (isFirst ? leftMargin : margin) - margin
+            if (segments.length === 0) return defaultW
+
+            const textBottom = y
+            const textTop = y + fontSize
+
+            for (const seg of segments) {
+              if (textBottom < seg.top && textTop > seg.bottom) {
+                if (seg.rightLimit < fullEdge - imgThreshold) {
+                  return isFirst ? seg.rightLimit - leftMargin : seg.rightLimit - margin
+                }
+                return defaultW
+              }
+            }
+
+            const maxTop = Math.max(...segments.map(s => s.top))
+            if (textBottom >= maxTop) return defaultW
+
+            const textMid = (textBottom + textTop) / 2
+            let nearest = segments[0]
+            let minDist = Infinity
+            for (const seg of segments) {
+              const segMid = (seg.bottom + seg.top) / 2
+              const d = Math.abs(textMid - segMid)
+              if (d < minDist) { minDist = d; nearest = seg }
+            }
+            if (nearest.rightLimit < fullEdge - imgThreshold) {
+              return isFirst ? nearest.rightLimit - leftMargin : nearest.rightLimit - margin
+            }
+            return defaultW
+          }
+
+          // Pre-calculate word-wrap with per-line width detection
           const words = translation.split(/\s+/)
+          const textLines: { text: string; x: number; y: number }[] = []
           let currentLine = ""
-          let currentY = para.y
+          let currentY = Math.min(para.y, cursorY)
           let isFirstLine = true
 
           for (const word of words) {
+            const maxWidth = widthAt(currentY, isFirstLine)
             const testLine = currentLine ? `${currentLine} ${word}` : word
             const textWidth = font.widthOfTextAtSize(testLine, fontSize)
-            const maxWidth = isFirstLine ? paraWidth : wrapWidth
             if (textWidth > maxWidth && currentLine) {
-              page.drawText(currentLine, {
-                x: isFirstLine ? leftMargin : margin,
-                y: currentY,
-                size: fontSize,
-                font,
-                color: darkGray,
-              })
+              textLines.push({ text: currentLine, x: isFirstLine ? leftMargin : margin, y: currentY })
               currentLine = word
               currentY -= fontSize * 1.4
               isFirstLine = false
@@ -211,13 +249,35 @@ export async function GET(
             }
           }
           if (currentLine) {
-            page.drawText(currentLine, {
-              x: isFirstLine ? leftMargin : margin,
-              y: currentY,
+            textLines.push({ text: currentLine, x: isFirstLine ? leftMargin : margin, y: currentY })
+          }
+
+          // Draw white rectangles covering the full vertical span of the translation
+          for (let i = 0; i < textLines.length; i++) {
+            const line = textLines[i]
+            const maxWidth = widthAt(line.y, i === 0)
+            page.drawRectangle({
+              x: line.x,
+              y: line.y - fontSize * 0.6,
+              width: maxWidth,
+              height: fontSize + 4,
+              color: white,
+            })
+          }
+
+          // Draw translated text
+          for (const line of textLines) {
+            page.drawText(line.text, {
+              x: line.x,
+              y: line.y,
               size: fontSize,
               font,
               color: darkGray,
             })
+          }
+
+          if (textLines.length > 0) {
+            cursorY = textLines[textLines.length - 1].y - fontSize * 0.4
           }
         }
 
