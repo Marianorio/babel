@@ -27,11 +27,14 @@ export default auth(async (req) => {
     }
   }
 
+  // Strip locale prefix for path matching
+  const pathWithoutLocale = pathname.replace(/^\/(es|en)(\/|$)/, "/$2")
+
   // Auth protection
   const publicPaths = ["/", "/login", "/register"]
 
-  if (publicPaths.some((p) => pathname === p)) {
-    if (isLoggedIn && (pathname === "/login" || pathname === "/register")) {
+  if (publicPaths.some((p) => pathWithoutLocale === p)) {
+    if (isLoggedIn && (pathWithoutLocale === "/login" || pathWithoutLocale === "/register")) {
       console.log("🔍 User is logged in, redirecting from login to dashboard")
       return Response.redirect(new URL("/dashboard", req.url))
     }
