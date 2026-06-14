@@ -11,13 +11,13 @@ model User {
   id        String     @id @default(cuid())
   name      String
   email     String     @unique
-  password  String
+  password  String?
   image     String?
   language            String     @default("es")
   theme               String     @default("light")
   timezone            String?
   country             String?
-  translationProvider String     @default("mock")
+  translationProvider String     @default("gemini")
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   documents Document[]

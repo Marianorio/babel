@@ -518,6 +518,7 @@ export async function updateUserPassword(formData: FormData) {
   })
 
   if (!user) return { error: "Usuario no encontrado" }
+  if (!user.password) return { error: "No puedes cambiar la contraseña de una cuenta vinculada" }
 
   const isValid = await bcrypt.compare(currentPassword, user.password)
   if (!isValid) {

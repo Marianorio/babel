@@ -206,7 +206,7 @@ export function PdfOverlayViewer({
                 lineY += fontSize * 1.4
               }
 
-              cursorY = lineY - fontSize * 1.4 + fontSize * 0.4
+              cursorY = effectiveY + (textLines.length - 1) * fontSize * 1.4 + fontSize
             }
           } else {
             const pageData = pageLines?.find((pd: any) => pd.pageNum === pageNum)

@@ -27,13 +27,10 @@ const ALLOWED_TYPES = [
 ]
 
 const PROVIDERS = [
-  { value: "mock", label: "Mock (simulado)" },
-  { value: "libretranslate", label: "LibreTranslate (gratuito)" },
-  { value: "argos", label: "Argos (auto-hospedado)" },
-  { value: "deepseek", label: "DeepSeek" },
+  { value: "gemini", label: "Gemini" },
   { value: "openrouter", label: "OpenRouter" },
-  { value: "gemini", label: "Gemini (gratuito)" },
-  { value: "openai", label: "OpenAI" },
+  { value: "openai", label: "OpenAI (de pago)" },
+  { value: "mock", label: "Mock (simulado)" },
 ]
 
 export function NewTranslationForm() {

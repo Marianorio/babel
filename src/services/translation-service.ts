@@ -55,7 +55,7 @@ export class TranslationService {
   private provider: TranslationProvider
 
   constructor(provider?: TranslationProvider) {
-    this.provider = provider || (process.env.TRANSLATION_PROVIDER as TranslationProvider) || "mock"
+    this.provider = provider || (process.env.TRANSLATION_PROVIDER as TranslationProvider) || "gemini"
   }
 
   setProvider(provider: TranslationProvider) {

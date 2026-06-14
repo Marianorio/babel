@@ -277,7 +277,7 @@ export async function GET(
           }
 
           if (textLines.length > 0) {
-            cursorY = textLines[textLines.length - 1].y - fontSize * 0.4
+            cursorY = textLines[textLines.length - 1].y - fontSize
           }
         }
 

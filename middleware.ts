@@ -11,6 +11,8 @@ export default auth(async (req) => {
   const { pathname } = req.nextUrl
   const isLoggedIn = !!req.auth
 
+  console.log(`🔍 Middleware: path=${pathname} isLoggedIn=${isLoggedIn} auth=${!!req.auth}`)
+
   // Let API routes through without any processing
   if (pathname.startsWith("/api/")) {
     return
@@ -20,6 +22,7 @@ export default auth(async (req) => {
   const intlResponse = intlMiddleware(req)
   if (intlResponse) {
     if (intlResponse.status === 302 || intlResponse.status === 307) {
+      console.log(`🔍 intl redirect: ${intlResponse.status} to ${intlResponse.headers.get("location")}`)
       return intlResponse
     }
   }
@@ -29,14 +32,18 @@ export default auth(async (req) => {
 
   if (publicPaths.some((p) => pathname === p)) {
     if (isLoggedIn && (pathname === "/login" || pathname === "/register")) {
+      console.log("🔍 User is logged in, redirecting from login to dashboard")
       return Response.redirect(new URL("/dashboard", req.url))
     }
     return
   }
 
   if (!isLoggedIn) {
+    console.log("🔍 Not logged in, redirecting to login")
     return Response.redirect(new URL("/login", req.url))
   }
+
+  console.log("🔍 Allowing through to:", pathname)
 })
 
 export const config = {

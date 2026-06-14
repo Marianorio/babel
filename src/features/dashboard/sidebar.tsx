@@ -33,7 +33,7 @@ export function Sidebar() {
     <>
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 flex h-full flex-col border-r border-border bg-card transition-all duration-300",
+          "fixed left-0 top-0 z-40 hidden h-full flex-col border-r border-border bg-card transition-all duration-300 md:flex",
           collapsed ? "w-16" : "w-64"
         )}
       >
@@ -110,5 +110,32 @@ export function Sidebar() {
         <CommandPalette onClose={() => setPaletteOpen(false)} />
       )}
     </>
+  )
+}
+
+export function MobileNav() {
+  const pathname = usePathname()
+
+  return (
+    <nav className="fixed bottom-0 left-0 z-50 flex h-16 w-full items-center justify-around border-t border-border bg-card px-2 pb-safe md:hidden">
+      {navItems.map((item) => {
+        const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+              isActive
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <item.icon className={cn("h-5 w-5", isActive && "drop-shadow-sm")} />
+            <span className="text-[10px] leading-tight">{item.label}</span>
+          </Link>
+        )
+      })}
+    </nav>
   )
 }

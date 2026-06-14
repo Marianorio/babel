@@ -69,7 +69,7 @@ export function Hero() {
                 babel-translations.app/documents
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
               <div className="border-r border-border p-6">
                 <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                   <div className="h-4 w-4 rounded bg-primary/10" />

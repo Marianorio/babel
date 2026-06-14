@@ -76,13 +76,10 @@ const LANGUAGES = [
 ]
 
 const PROVIDERS = [
-  { value: "mock", label: "Mock (simulado)" },
-  { value: "libretranslate", label: "LibreTranslate (gratuito)" },
-  { value: "argos", label: "Argos (auto-hospedado)" },
-  { value: "deepseek", label: "DeepSeek" },
+  { value: "gemini", label: "Gemini" },
   { value: "openrouter", label: "OpenRouter" },
-  { value: "gemini", label: "Gemini (gratuito)" },
-  { value: "openai", label: "OpenAI" },
+  { value: "openai", label: "OpenAI (de pago)" },
+  { value: "mock", label: "Mock (simulado)" },
 ]
 
 export function SettingsForm({ user }: { user: UserData }) {
@@ -237,7 +234,7 @@ export function SettingsForm({ user }: { user: UserData }) {
             <Select
               key={user.translationProvider || "mock"}
               name="translationProvider"
-              defaultValue={user.translationProvider || "mock"}
+              defaultValue={user.translationProvider || "gemini"}
             >
               <SelectTrigger>
                 <SelectValue />
