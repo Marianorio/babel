@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth"
+import { NextResponse } from "next/server"
 
 export default auth(async (req) => {
   const { pathname } = req.nextUrl
@@ -6,7 +7,7 @@ export default auth(async (req) => {
 
   // Let API routes through
   if (pathname.startsWith("/api/")) {
-    return
+    return NextResponse.next()
   }
 
   // Auth protection
@@ -16,12 +17,14 @@ export default auth(async (req) => {
     if (isLoggedIn && (pathname === "/login" || pathname === "/register")) {
       return Response.redirect(new URL("/dashboard", req.url))
     }
-    return
+    return NextResponse.next()
   }
 
   if (!isLoggedIn) {
     return Response.redirect(new URL("/login", req.url))
   }
+
+  return NextResponse.next()
 })
 
 export const config = {
