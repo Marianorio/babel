@@ -77,7 +77,7 @@ export async function uploadDocument(formData: FormData) {
     if (IMAGE_EXTENSIONS.includes(ext)) {
       originalText = await extractTextFromImage(buffer)
     } else if (ext === ".pdf") {
-      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+      const pdfjs = await import("pdfjs-dist")
       const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) })
       const doc = await loadingTask.promise
       pdfPageCount = doc.numPages
