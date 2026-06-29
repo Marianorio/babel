@@ -1,5 +1,12 @@
 import { rateLimit } from "@/lib/rate-limit"
 
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 25000): Promise<Response> {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new TranslationError("El proveedor no respondió a tiempo. Intentá de nuevo o cambiá de proveedor.")), timeoutMs)
+  )
+  return Promise.race([fetch(url, options), timeoutPromise])
+}
+
 export class TranslationError extends Error {
   constructor(message?: string) {
     super(message || "Límite de intentos alcanzado. Cambia de proveedor o intenta más tarde.")
@@ -150,11 +157,7 @@ export class TranslationService {
 
     const prompt = this.buildPrompt(request)
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 25000)
-
-    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
-      signal: controller.signal,
+    const response = await fetchWithTimeout("https://api.deepseek.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -169,7 +172,7 @@ export class TranslationService {
           },
         ],
       }),
-    }).finally(() => clearTimeout(timeoutId))
+    })
 
     if (!response.ok) {
       throw new TranslationError("Error en DeepSeek: " + response.status)
@@ -192,13 +195,9 @@ export class TranslationService {
 
     const prompt = this.buildPrompt(request)
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 25000)
-
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        signal: controller.signal,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -209,7 +208,7 @@ export class TranslationService {
           messages: [{ role: "user", content: prompt }],
         }),
       }
-    ).finally(() => clearTimeout(timeoutId))
+    )
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "")
@@ -263,13 +262,9 @@ export class TranslationService {
 
     const prompt = this.buildPrompt({ ...request, text })
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 25000)
-
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=" + apiKey,
       {
-        signal: controller.signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -282,7 +277,7 @@ export class TranslationService {
           ],
         }),
       }
-    ).finally(() => clearTimeout(timeoutId))
+    )
 
     if (!response.ok) {
       const errText = await response.text()
@@ -328,13 +323,9 @@ export class TranslationService {
 
     const prompt = this.buildPrompt(request)
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 25000)
-
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       "https://api.openai.com/v1/chat/completions",
       {
-        signal: controller.signal,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -347,7 +338,7 @@ export class TranslationService {
           ],
         }),
       }
-    ).finally(() => clearTimeout(timeoutId))
+    )
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "")

@@ -34,14 +34,15 @@ async function extractTextFromImage(buffer: Buffer): Promise<string> {
 }
 
 export async function uploadDocument(formData: FormData) {
-  const session = await auth()
-  if (!session?.user?.id) return { error: "No autorizado" }
+  try {
+    const session = await auth()
+    if (!session?.user?.id) return { error: "No autorizado" }
 
-  const file = formData.get("file") as File
-  const sourceLanguage = formData.get("sourceLanguage") as string
-  const targetLanguage = formData.get("targetLanguage") as string
-  const documentProvider = formData.get("translationProvider") as string
-  const pagesInput = formData.get("pages") as string
+    const file = formData.get("file") as File
+    const sourceLanguage = formData.get("sourceLanguage") as string
+    const targetLanguage = formData.get("targetLanguage") as string
+    const documentProvider = formData.get("translationProvider") as string
+    const pagesInput = formData.get("pages") as string
 
   if (!file || !sourceLanguage || !targetLanguage) {
     return { error: "Todos los campos son obligatorios" }
@@ -207,9 +208,13 @@ export async function uploadDocument(formData: FormData) {
   }
 
   const storedName = `${Date.now()}-${sanitizeFileName(file.name)}`
-  const uploadDir = join(process.cwd(), "uploads")
+  const uploadDir = process.env.UPLOAD_DIR || join(process.cwd(), "uploads")
 
-  await mkdir(uploadDir, { recursive: true })
+  try {
+    await mkdir(uploadDir, { recursive: true })
+  } catch {
+    return { error: "Error al crear el directorio de archivos. Verifica que UPLOAD_DIR esté configurado correctamente." }
+  }
 
   const filePath = join(uploadDir, storedName)
   await writeFile(filePath, buffer)
@@ -407,6 +412,10 @@ export async function uploadDocument(formData: FormData) {
   revalidatePath("/dashboard")
 
   return { success: true, documentId: document.id }
+  } catch (e) {
+    console.error("Error inesperado en uploadDocument:", e instanceof Error ? e.message : e)
+    return { error: "Error interno del servidor. Intentá de nuevo o probá con el proveedor Mock." }
+  }
 }
 
 export async function getDocuments() {

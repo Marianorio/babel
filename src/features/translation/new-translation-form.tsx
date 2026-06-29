@@ -177,7 +177,7 @@ export function NewTranslationForm() {
       router.refresh()
     } catch (e) {
       clearTimeout(timeout)
-      toast.error("Error inesperado al traducir. Intentá de nuevo.")
+      toast.error("Error de conexión con el servidor. Si el problema persiste, probá con un documento más corto o el proveedor Mock.")
       setLoading(false)
     }
   }
