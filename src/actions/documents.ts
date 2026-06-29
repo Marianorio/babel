@@ -8,7 +8,7 @@ import { join, extname } from "path"
 import { logActivity } from "@/services/activity-service"
 import { validateMime } from "@/lib/mime-validator"
 import { rateLimit } from "@/lib/rate-limit"
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs"
+
 import { parsePageRange } from "@/lib/page-range"
 import type { Paragraph, TextItem } from "@/types"
 
@@ -77,7 +77,8 @@ export async function uploadDocument(formData: FormData) {
     if (IMAGE_EXTENSIONS.includes(ext)) {
       originalText = await extractTextFromImage(buffer)
     } else if (ext === ".pdf") {
-      const loadingTask = getDocument({ data: new Uint8Array(buffer) })
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) })
       const doc = await loadingTask.promise
       pdfPageCount = doc.numPages
       const selectedPages = pagesInput ? parsePageRange(pagesInput, pdfPageCount) : []
