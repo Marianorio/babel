@@ -16,6 +16,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 })
     }
 
+    console.log("API translate: document found, userId:", document.userId)
+
     await prisma.document.update({ where: { id }, data: { status: "processing" } })
 
     const user = await prisma.user.findUnique({
@@ -23,6 +25,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       select: { translationProvider: true },
     })
     const provider = user?.translationProvider as TranslationProvider | undefined
+    console.log("API translate: provider from user settings:", provider)
+
     const service = new TranslationService(provider)
 
     let translatedText = ""
@@ -33,17 +37,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const allPageLines: { pageNum: number; lines: { y: number; chars: number; texts: TextItem[] }[] }[] =
       document.pageLines ? JSON.parse(document.pageLines) : []
 
+    console.log("API translate: paragraphs:", allParagraphs.length, "pageLines:", allPageLines.length)
+
     if (allParagraphs && allParagraphs.length > 0) {
       const markedText = allParagraphs
         .map(p => `<paragraph id="${p.id}">\n${p.text}\n</paragraph>`)
         .join("\n\n")
 
+      console.log("API translate: calling service.translate with paragraphs")
       const result = await service.translate({
         text: markedText,
         sourceLanguage: document.sourceLanguage,
         targetLanguage: document.targetLanguage,
         preserveMarkers: true,
       })
+      console.log("API translate: translation result received, provider:", result.provider)
 
       translatedText = result.translatedText
 
@@ -56,8 +64,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       const matchedCount = Object.keys(paragraphTranslationsMap).length
       const markersFailed = matchedCount < allParagraphs.length * 0.5
+      console.log("API translate: markers matched:", matchedCount, "of", allParagraphs.length, "failed:", markersFailed)
 
       if (markersFailed) {
+        console.log("API translate: markers failed, retrying without markers")
         const result2 = await service.translate({
           text: document.originalText,
           sourceLanguage: document.sourceLanguage,
@@ -109,12 +119,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }
       }
     } else {
+      console.log("API translate: no paragraphs, translating full text")
       const result = await service.translate({
         text: document.originalText,
         sourceLanguage: document.sourceLanguage,
         targetLanguage: document.targetLanguage,
       })
       translatedText = result.translatedText
+      console.log("API translate: full text translation received")
 
       if (allPageLines && allPageLines.length > 0 && translatedText) {
         type PageLineData = (typeof allPageLines)[number]
@@ -143,6 +155,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
+    console.log("API translate: saving to DB")
     await prisma.document.update({
       where: { id },
       data: {
@@ -152,9 +165,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         status: "completed",
       },
     })
+    console.log("API translate: completed successfully")
 
     return NextResponse.json({ success: true })
   } catch (err) {
+    console.error("API translate ERROR:", err instanceof Error ? err.message : err)
+    if (err instanceof Error) console.error("Stack:", err.stack)
+
     await prisma.document.update({
       where: { id },
       data: { status: "error" },
