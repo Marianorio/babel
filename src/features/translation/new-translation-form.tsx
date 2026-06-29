@@ -157,17 +157,29 @@ export function NewTranslationForm() {
     if (provider) formData.append("translationProvider", provider)
     if (pageRange.trim()) formData.append("pages", pageRange.trim())
 
-    const result = await uploadDocument(formData)
-
-    if (result.error) {
-      toast.error(result.error)
+    const timeout = setTimeout(() => {
       setLoading(false)
-      return
-    }
+      toast.error("La traducción está tomando más de lo esperado. Si el problema persiste, intentá con un documento más corto o cambiá de proveedor.")
+    }, 60000)
 
-    toast.success("Traducción completada")
-    router.push(`/dashboard/translation/${result.documentId}`)
-    router.refresh()
+    try {
+      const result = await uploadDocument(formData)
+      clearTimeout(timeout)
+
+      if (result.error) {
+        toast.error(result.error)
+        setLoading(false)
+        return
+      }
+
+      toast.success("Traducción completada")
+      router.push(`/dashboard/translation/${result.documentId}`)
+      router.refresh()
+    } catch (e) {
+      clearTimeout(timeout)
+      toast.error("Error inesperado al traducir. Intentá de nuevo.")
+      setLoading(false)
+    }
   }
 
   const fileName = file?.name?.toLowerCase() || ""
