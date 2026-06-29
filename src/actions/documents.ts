@@ -77,7 +77,7 @@ export async function uploadDocument(formData: FormData) {
     if (IMAGE_EXTENSIONS.includes(ext)) {
       originalText = await extractTextFromImage(buffer)
     } else if (ext === ".pdf") {
-      const pdfjs = await import("pdfjs-dist")
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
       const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) })
       const doc = await loadingTask.promise
       pdfPageCount = doc.numPages
@@ -202,9 +202,10 @@ export async function uploadDocument(formData: FormData) {
       originalText = buffer.toString("utf-8").replace(/\0/g, "")
     }
   } catch (err) {
-    console.error("Error extrayendo texto:", err instanceof Error ? err.message : err)
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error("Error extrayendo texto:", msg)
     if (err instanceof Error) console.error("Stack:", err.stack)
-    return { error: `No se pudo extraer el texto del archivo ${ext}. Asegúrate de que no esté protegido o dañado.` }
+    return { error: `No se pudo extraer el texto del archivo ${ext}. Error: ${msg}` }
   }
 
   const storedName = `${Date.now()}-${sanitizeFileName(file.name)}`
