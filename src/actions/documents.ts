@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { writeFile, mkdir } from "fs/promises"
 import { join, extname } from "path"
-import { TranslationService, TranslationError, type TranslationProvider } from "@/services/translation-service"
 import { logActivity } from "@/services/activity-service"
 import { validateMime } from "@/lib/mime-validator"
 import { rateLimit } from "@/lib/rate-limit"
@@ -255,158 +254,10 @@ export async function uploadDocument(formData: FormData) {
     metadata: { sourceLanguage, targetLanguage, fileSize: file.size },
   }).catch(() => {})
 
-  const provider = (documentProvider ||
-    (await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { translationProvider: true },
-    }))?.translationProvider) as TranslationProvider | undefined
-
-  const service = new TranslationService(provider)
-
-  try {
-    let translatedText = ""
-    let pageLineTranslations: any = null
-    let paragraphTranslationsMap: Record<string, string> | null = null
-
-    if (allParagraphs && allParagraphs.length > 0) {
-      const markedText = allParagraphs
-        .map(p => `<paragraph id="${p.id}">\n${p.text}\n</paragraph>`)
-        .join("\n\n")
-
-      const result = await service.translate({
-        text: markedText,
-        sourceLanguage,
-        targetLanguage,
-        preserveMarkers: true,
-      })
-
-      translatedText = result.translatedText
-
-      const paraRegex = /<\s*paragraph\s+id="([^"]+)"\s*>([\s\S]*?)<\s*\/\s*paragraph\s*>/gi
-      paragraphTranslationsMap = {}
-      let match
-      while ((match = paraRegex.exec(translatedText)) !== null) {
-        paragraphTranslationsMap[match[1]] = NORMALIZE_WS(match[2])
-      }
-
-      const matchedCount = Object.keys(paragraphTranslationsMap).length
-      const markersFailed = matchedCount < allParagraphs.length * 0.5
-
-      if (markersFailed) {
-        const result2 = await service.translate({
-          text: originalText,
-          sourceLanguage,
-          targetLanguage,
-        })
-        translatedText = result2.translatedText
-        paragraphTranslationsMap = null
-      }
-
-      if (allPageLines && allPageLines.length > 0) {
-        if (paragraphTranslationsMap) {
-          const pMap = paragraphTranslationsMap
-          pageLineTranslations = allPageLines.map((pg) => {
-            const pageParas = allParagraphs.filter(p => p.pageNum === pg.pageNum)
-            const translations: string[] = []
-            for (const line of pg.lines) {
-              const lineText = NORMALIZE_WS(line.texts.map(t => t.str).join(" "))
-              const owner = pageParas.find(p =>
-                p.lines.some(l => NORMALIZE_WS(l.texts.map(t => t.str).join(" ")) === lineText)
-              )
-              translations.push(owner ? (pMap[owner.id] || "") : "")
-            }
-            return { pageNum: pg.pageNum, translations }
-          })
-        } else if (translatedText) {
-          type PageLineData = (typeof allPageLines)[number]
-          type LineData = PageLineData["lines"][number]
-          const lineWords = (l: LineData) => l.texts.map((t: any) => t.str).join(" ").split(/\s+/).filter(Boolean).length
-          const pageOrigWords: number[] = allPageLines.map((p: PageLineData) => p.lines.reduce((s: number, l: LineData) => s + lineWords(l), 0))
-          const totalOrigWords: number = pageOrigWords.reduce((s: number, c: number) => s + c, 0) || 1
-          pageLineTranslations = allPageLines.map((pageData: PageLineData, pageIdx: number) => {
-            const pageRatio = pageOrigWords[pageIdx] / totalOrigWords
-            const prevWords = pageOrigWords.slice(0, pageIdx).reduce((s: number, c: number) => s + c, 0)
-            const transWords = translatedText.split(/\s+/).filter(Boolean)
-            const pageStart = Math.round(prevWords / totalOrigWords * transWords.length)
-            const pageLen = Math.round(pageRatio * transWords.length)
-            let wordStart = 0
-            const translations: string[] = []
-            for (const line of pageData.lines) {
-              const wc = lineWords(line)
-              const ratio = wc / (pageData.lines.reduce((s: number, l: LineData) => s + lineWords(l), 0) || 1)
-              const nWords = Math.max(Math.round(ratio * pageLen), 1)
-              const slice = transWords.slice(pageStart + wordStart, Math.min(pageStart + wordStart + nWords, transWords.length))
-              translations.push(slice.join(" "))
-              wordStart += nWords
-            }
-            return { pageNum: pageData.pageNum, translations }
-          })
-        }
-      }
-    } else {
-      const result = await service.translate({
-        text: originalText,
-        sourceLanguage,
-        targetLanguage,
-      })
-      translatedText = result.translatedText
-
-      if (allPageLines && allPageLines.length > 0 && translatedText) {
-        type PageLineData = (typeof allPageLines)[number]
-        type LineData = PageLineData["lines"][number]
-
-        const lineWords = (l: LineData) => l.texts.map((t: any) => t.str).join(" ").split(/\s+/).filter(Boolean).length
-        const pageOrigWords: number[] = allPageLines.map((p: PageLineData) => p.lines.reduce((s: number, l: LineData) => s + lineWords(l), 0))
-        const totalOrigWords: number = pageOrigWords.reduce((s: number, c: number) => s + c, 0) || 1
-
-        pageLineTranslations = allPageLines.map((pageData: PageLineData, pageIdx: number) => {
-          const pageRatio = pageOrigWords[pageIdx] / totalOrigWords
-          const prevWords = pageOrigWords.slice(0, pageIdx).reduce((s: number, c: number) => s + c, 0)
-
-          const transWords = translatedText.split(/\s+/).filter(Boolean)
-          const pageStart = Math.round(prevWords / totalOrigWords * transWords.length)
-          const pageLen = Math.round(pageRatio * transWords.length)
-
-          let wordStart = 0
-          const translations: string[] = []
-          for (const line of pageData.lines) {
-            const wc = lineWords(line)
-            const ratio = wc / (pageData.lines.reduce((s: number, l: LineData) => s + lineWords(l), 0) || 1)
-            const nWords = Math.max(Math.round(ratio * pageLen), 1)
-            const slice = transWords.slice(pageStart + wordStart, Math.min(pageStart + wordStart + nWords, transWords.length))
-            translations.push(slice.join(" "))
-            wordStart += nWords
-          }
-          return { pageNum: pageData.pageNum, translations }
-        })
-      }
-    }
-
-    await prisma.document.update({
-      where: { id: document.id },
-      data: {
-        translatedText,
-        pageLineTranslations: pageLineTranslations ? JSON.stringify(pageLineTranslations) : undefined,
-        paragraphTranslations: paragraphTranslationsMap ? JSON.stringify(paragraphTranslationsMap) : undefined,
-        status: "completed",
-      },
-    })
-
-    await logActivity({
-      userId: session.user.id,
-      type: "document_translated",
-      detail: `"${file.name}" traducido de ${sourceLanguage.toUpperCase()} a ${targetLanguage.toUpperCase()}`,
-      documentId: document.id,
-      metadata: { sourceLanguage, targetLanguage, wordCount, charCount },
-    })
-  } catch (err) {
-    await prisma.document.update({
-      where: { id: document.id },
-      data: { status: "error" },
-    })
-    const message = err instanceof TranslationError ? err.message : "Error al procesar la traducción"
-    return { error: message }
-  }
+  await prisma.document.update({
+    where: { id: document.id },
+    data: { status: "pending" },
+  })
 
   revalidatePath("/dashboard/documents")
   revalidatePath("/dashboard")

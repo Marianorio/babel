@@ -157,14 +157,8 @@ export function NewTranslationForm() {
     if (provider) formData.append("translationProvider", provider)
     if (pageRange.trim()) formData.append("pages", pageRange.trim())
 
-    const timeout = setTimeout(() => {
-      setLoading(false)
-      toast.error("La traducción está tomando más de lo esperado. Si el problema persiste, intentá con un documento más corto o cambiá de proveedor.")
-    }, 60000)
-
     try {
       const result = await uploadDocument(formData)
-      clearTimeout(timeout)
 
       if (result.error) {
         toast.error(result.error)
@@ -172,12 +166,24 @@ export function NewTranslationForm() {
         return
       }
 
+      const docId = result.documentId
+
+      toast.success("Documento subido. Iniciando traducción...")
+
+      const translateRes = await fetch(`/api/documents/${docId}/translate`, { method: "POST" })
+      const translateData = await translateRes.json()
+
+      if (translateData.error) {
+        toast.error(translateData.error)
+        setLoading(false)
+        return
+      }
+
       toast.success("Traducción completada")
-      router.push(`/dashboard/translation/${result.documentId}`)
+      router.push(`/dashboard/translation/${docId}`)
       router.refresh()
     } catch (e) {
-      clearTimeout(timeout)
-      toast.error("Error de conexión con el servidor. Si el problema persiste, probá con un documento más corto o el proveedor Mock.")
+      toast.error("Error inesperado al traducir. Intentá de nuevo.")
       setLoading(false)
     }
   }
