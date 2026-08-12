@@ -78,5 +78,14 @@ function installDomPolyfills() {
 
 export async function loadPdfJs() {
   installDomPolyfills()
-  return import("pdfjs-dist/legacy/build/pdf.mjs")
+
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+
+  const { createRequire } = await import("node:module")
+  const { pathToFileURL } = await import("node:url")
+  const require = createRequire(import.meta.url)
+  const workerPath = require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs")
+  pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
+
+  return pdfjs
 }
