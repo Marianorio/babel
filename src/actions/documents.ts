@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import { writeFile, mkdir } from "fs/promises"
 import { join, extname } from "path"
 import { logActivity } from "@/services/activity-service"
+import { loadPdfJs } from "@/lib/pdfjs-loader"
 import { validateMime } from "@/lib/mime-validator"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -77,7 +78,7 @@ export async function uploadDocument(formData: FormData) {
     if (IMAGE_EXTENSIONS.includes(ext)) {
       originalText = await extractTextFromImage(buffer)
     } else if (ext === ".pdf") {
-      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+      const pdfjs = await loadPdfJs()
       const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) })
       const doc = await loadingTask.promise
       pdfPageCount = doc.numPages
